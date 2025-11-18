@@ -4,7 +4,7 @@ FROM eclipse-temurin:21-jdk-alpine AS build
 WORKDIR /app
 
 # Copy Maven wrapper and pom.xml
-COPY mvnw .
+COPY --chmod=755 mvnw .
 COPY .mvn .mvn
 COPY pom.xml .
 
@@ -25,9 +25,10 @@ WORKDIR /app
 # Copy the built JAR from build stage
 COPY --from=build /app/target/awad-email-0.0.1-SNAPSHOT.jar app.jar
 
-# Expose port
+# Expose port (Render will use PORT environment variable)
 EXPOSE 8080
 
 # Run the application
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# Use shell form to allow environment variable substitution
+CMD java -Dserver.port=${PORT:-8080} -jar app.jar
 
