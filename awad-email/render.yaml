@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: awad-email-backend
+    env: java
+    buildCommand: ./mvnw clean package -DskipTests
+    startCommand: java -jar target/awad-email-0.0.1-SNAPSHOT.jar
+    envVars:
+      - key: SERVER_PORT
+        value: 8080
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_TOKEN_EXPIRATION
+        value: 900000
+      - key: JWT_REFRESH_TOKEN_EXPIRATION
+        value: 604800000
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+

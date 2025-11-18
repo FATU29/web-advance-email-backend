@@ -1,0 +1,39 @@
+spring:
+  application:
+    name: awad-email
+
+  # MongoDB Configuration
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017/awad_email}
+      auto-index-creation: true
+
+  # Jackson Configuration
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    time-zone: UTC
+
+# Server Configuration
+server:
+  port: ${SERVER_PORT:8080}
+
+# JWT Configuration
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    access-token-expiration-ms: ${JWT_ACCESS_TOKEN_EXPIRATION:3600000}
+    refresh-token-expiration-ms: ${JWT_REFRESH_TOKEN_EXPIRATION:86400000}
+
+  # Google OAuth Configuration
+  google:
+    client-id: ${GOOGLE_CLIENT_ID}
+    client-secret: ${GOOGLE_CLIENT_SECRET}
+    redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:3000/auth/callback}
+
+# Logging
+logging:
+  level:
+    com.hcmus.awad_email: ${LOG_LEVEL:INFO}
+    org.springframework.security: ${LOG_LEVEL_SECURITY:WARN}
+    org.springframework.web: ${LOG_LEVEL_WEB:INFO}
