@@ -69,5 +69,19 @@ public class AuthController {
         authService.logout(userId, refreshToken);
         return ResponseEntity.ok(ApiResponse.success("Logout successful", null));
     }
+
+    @GetMapping("/me")
+    public ResponseEntity<ApiResponse<AuthResponse.UserInfo>> getCurrentUser(Authentication authentication) {
+        String userId = (String) authentication.getPrincipal();
+        AuthResponse.UserInfo userInfo = authService.getUserInfo(userId);
+        return ResponseEntity.ok(ApiResponse.success("User info retrieved successfully", userInfo));
+    }
+
+    @PostMapping("/introspect")
+    public ResponseEntity<ApiResponse<TokenIntrospectResponse>> introspectToken(@Valid @RequestBody TokenIntrospectRequest request) {
+        TokenIntrospectResponse response = authService.introspectToken(request);
+        String message = response.isValid() ? "Token is valid" : "Token is invalid";
+        return ResponseEntity.ok(ApiResponse.success(message, response));
+    }
 }
 

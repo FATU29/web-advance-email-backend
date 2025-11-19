@@ -30,13 +30,20 @@ public class JwtTokenProvider {
         return Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
     }
     
-    public String generateAccessToken(String userId, String email) {
+    public String generateAccessToken(String userId, String email, String name, String profilePicture) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + accessTokenExpirationMs);
-        
+
+        // Create user profile object
+        java.util.Map<String, Object> userProfile = new java.util.HashMap<>();
+        userProfile.put("id", userId);
+        userProfile.put("email", email);
+        userProfile.put("name", name);
+        userProfile.put("profilePicture", profilePicture);
+
         return Jwts.builder()
                 .subject(userId)
-                .claim("email", email)
+                .claim("user", userProfile)
                 .claim("type", "access")
                 .issuedAt(now)
                 .expiration(expiryDate)
@@ -87,11 +94,24 @@ public class JwtTokenProvider {
         }
         return false;
     }
-    
+
+    public Claims getClaimsFromToken(String token) {
+        try {
+            return Jwts.parser()
+                    .verifyWith(getSigningKey())
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
+        } catch (Exception ex) {
+            logger.error("Failed to parse token claims", ex);
+            return null;
+        }
+    }
+
     public long getAccessTokenExpirationMs() {
         return accessTokenExpirationMs;
     }
-    
+
     public long getRefreshTokenExpirationMs() {
         return refreshTokenExpirationMs;
     }

@@ -150,6 +150,66 @@ Response:
 }
 ```
 
+#### 6. Get Current User Info
+```
+GET /api/auth/me
+Authorization: Bearer {access_token}
+
+Response:
+{
+  "success": true,
+  "message": "User info retrieved successfully",
+  "data": {
+    "id": "user_id",
+    "email": "john@example.com",
+    "name": "John Doe",
+    "profilePicture": "https://..."
+  }
+}
+```
+
+#### 7. Introspect Token
+```
+POST /api/auth/introspect
+Content-Type: application/json
+
+{
+  "token": "eyJhbGc..."
+}
+
+Response (Valid Token):
+{
+  "success": true,
+  "message": "Token is valid",
+  "data": {
+    "isValid": true
+  }
+}
+
+Response (Invalid Token):
+{
+  "success": true,
+  "message": "Token is invalid",
+  "data": {
+    "isValid": false
+  }
+}
+
+Note: The access token itself contains user profile information in the "user" claim:
+{
+  "sub": "user_id",
+  "user": {
+    "id": "user_id",
+    "email": "john@example.com",
+    "name": "John Doe",
+    "profilePicture": "https://..."
+  },
+  "type": "access",
+  "iat": 1700000000,
+  "exp": 1700000900
+}
+```
+
 ### Mailbox Endpoints
 
 #### 1. Get All Mailboxes

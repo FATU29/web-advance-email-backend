@@ -168,22 +168,22 @@ public class AuthService {
     public AuthResponse refreshToken(RefreshTokenRequest request) {
         RefreshToken refreshToken = refreshTokenRepository.findByToken(request.getRefreshToken())
                 .orElseThrow(() -> new UnauthorizedException("Invalid refresh token"));
-        
+
         if (refreshToken.isRevoked()) {
             throw new UnauthorizedException("Refresh token has been revoked");
         }
-        
+
         if (refreshToken.getExpiryDate().isBefore(LocalDateTime.now())) {
             refreshTokenRepository.delete(refreshToken);
             throw new UnauthorizedException("Refresh token has expired");
         }
-        
+
         User user = userRepository.findById(refreshToken.getUserId())
                 .orElseThrow(() -> new UnauthorizedException("User not found"));
-        
+
         // Generate new access token
-        String accessToken = tokenProvider.generateAccessToken(user.getId(), user.getEmail());
-        
+        String accessToken = tokenProvider.generateAccessToken(user.getId(), user.getEmail(), user.getName(), user.getProfilePicture());
+
         return AuthResponse.builder()
                 .accessToken(accessToken)
                 .refreshToken(refreshToken.getToken())
@@ -206,11 +206,32 @@ public class AuthService {
             refreshTokenRepository.deleteByUserId(userId);
         }
     }
-    
+
+    public AuthResponse.UserInfo getUserInfo(String userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UnauthorizedException("User not found"));
+
+        return AuthResponse.UserInfo.builder()
+                .id(user.getId())
+                .email(user.getEmail())
+                .name(user.getName())
+                .profilePicture(user.getProfilePicture())
+                .build();
+    }
+
+    public TokenIntrospectResponse introspectToken(TokenIntrospectRequest request) {
+        String token = request.getToken();
+        boolean isValid = tokenProvider.validateToken(token);
+
+        return TokenIntrospectResponse.builder()
+                .isValid(isValid)
+                .build();
+    }
+
     private AuthResponse generateAuthResponse(User user) {
-        String accessToken = tokenProvider.generateAccessToken(user.getId(), user.getEmail());
+        String accessToken = tokenProvider.generateAccessToken(user.getId(), user.getEmail(), user.getName(), user.getProfilePicture());
         String refreshTokenStr = tokenProvider.generateRefreshToken(user.getId());
-        
+
         // Save refresh token to database
         RefreshToken refreshToken = RefreshToken.builder()
                 .token(refreshTokenStr)
@@ -219,9 +240,9 @@ public class AuthService {
                 .createdAt(LocalDateTime.now())
                 .revoked(false)
                 .build();
-        
+
         refreshTokenRepository.save(refreshToken);
-        
+
         return AuthResponse.builder()
                 .accessToken(accessToken)
                 .refreshToken(refreshTokenStr)
