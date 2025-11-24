@@ -36,9 +36,13 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/auth/login",
                                 "/api/auth/signup",
+                                "/api/auth/verify-email",
+                                "/api/auth/resend-verification-otp",
                                 "/api/auth/google",
                                 "/api/auth/refresh",
                                 "/api/auth/introspect",
+                                "/api/auth/forgot-password",
+                                "/api/auth/reset-password",
                                 "/api/health",
                                 "/error"
                         ).permitAll()

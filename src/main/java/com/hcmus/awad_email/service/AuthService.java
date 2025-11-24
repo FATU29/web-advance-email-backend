@@ -39,7 +39,10 @@ public class AuthService {
     
     @Autowired
     private MailboxService mailboxService;
-    
+
+    @Autowired
+    private OtpService otpService;
+
     @Value("${app.google.client-id}")
     private String googleClientId;
 
@@ -50,46 +53,78 @@ public class AuthService {
     private String googleRedirectUri;
     
     @Transactional
-    public AuthResponse signup(SignupRequest request) {
+    public void signup(SignupRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new BadRequestException("Email already exists");
         }
-        
+
         User user = User.builder()
                 .email(request.getEmail())
                 .name(request.getName())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .authProvider(User.AuthProvider.EMAIL)
-                .enabled(true)
+                .enabled(false) // Disabled until email is verified
+                .verified(false)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
-        
+
         user = userRepository.save(user);
-        
+
         // Initialize default mailboxes for the new user
         mailboxService.initializeDefaultMailboxes(user.getId());
-        
+
+        // Send OTP for email verification
+        otpService.generateAndSendOtp(user.getEmail(), user.getName(), com.hcmus.awad_email.model.Otp.OtpType.SIGNUP);
+    }
+
+    @Transactional
+    public AuthResponse verifyEmail(VerifyOtpRequest request) {
+        // Verify OTP
+        otpService.verifyOtp(request.getEmail(), request.getCode(), com.hcmus.awad_email.model.Otp.OtpType.SIGNUP);
+
+        // Find user and enable account
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new BadRequestException("User not found"));
+
+        user.setEnabled(true);
+        user.setVerified(true);
+        user.setUpdatedAt(LocalDateTime.now());
+        userRepository.save(user);
+
         return generateAuthResponse(user);
+    }
+
+    @Transactional
+    public void resendVerificationOtp(SendOtpRequest request) {
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new BadRequestException("User not found"));
+
+        if (user.isVerified()) {
+            throw new BadRequestException("Email is already verified");
+        }
+
+        otpService.generateAndSendOtp(user.getEmail(), user.getName(), com.hcmus.awad_email.model.Otp.OtpType.SIGNUP);
     }
     
     @Transactional
     public AuthResponse login(LoginRequest request) {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new UnauthorizedException("Invalid email or password"));
-        
-        if (user.getAuthProvider() != User.AuthProvider.EMAIL) {
-            throw new BadRequestException("Please use " + user.getAuthProvider() + " to login");
+
+        // Check if user has password (EMAIL or BOTH auth provider)
+        if (user.getPassword() == null) {
+            throw new BadRequestException("Please use Google to login");
         }
-        
+
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             throw new UnauthorizedException("Invalid email or password");
         }
-        
+
         if (!user.isEnabled()) {
-            throw new UnauthorizedException("Account is disabled");
+            throw new UnauthorizedException("Account is not verified. Please verify your email.");
         }
-        
+
         return generateAuthResponse(user);
     }
     
@@ -131,9 +166,21 @@ public class AuthService {
                                 .map(existingUser -> {
                                     // Link Google account to existing user
                                     existingUser.setGoogleId(googleId);
-                                    existingUser.setAuthProvider(User.AuthProvider.GOOGLE);
+                                    // If user has password, set to BOTH, otherwise GOOGLE
+                                    if (existingUser.getPassword() != null) {
+                                        existingUser.setAuthProvider(User.AuthProvider.BOTH);
+                                    } else {
+                                        existingUser.setAuthProvider(User.AuthProvider.GOOGLE);
+                                    }
                                     existingUser.setProfilePicture(pictureUrl);
+                                    // Google login verifies the email, so enable the account
+                                    existingUser.setVerified(true);
+                                    existingUser.setEnabled(true);
                                     existingUser.setUpdatedAt(LocalDateTime.now());
+
+                                    // Delete any pending OTPs for this email since Google verified it
+                                    otpService.deleteOtp(email);
+
                                     return userRepository.save(existingUser);
                                 })
                                 .orElseGet(() -> {
@@ -145,6 +192,7 @@ public class AuthService {
                                             .profilePicture(pictureUrl)
                                             .authProvider(User.AuthProvider.GOOGLE)
                                             .enabled(true)
+                                            .verified(true) // Google accounts are pre-verified
                                             .createdAt(LocalDateTime.now())
                                             .updatedAt(LocalDateTime.now())
                                             .build();
@@ -226,6 +274,81 @@ public class AuthService {
         return TokenIntrospectResponse.builder()
                 .isValid(isValid)
                 .build();
+    }
+
+    @Transactional
+    public void forgotPassword(ForgotPasswordRequest request) {
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new BadRequestException("User not found"));
+
+        // Check if user has password (not pure Google OAuth user)
+        if (user.getPassword() == null) {
+            throw new BadRequestException("This account uses Google login only. Please login with Google.");
+        }
+
+        // Send OTP for password reset
+        otpService.generateAndSendOtp(user.getEmail(), user.getName(), com.hcmus.awad_email.model.Otp.OtpType.FORGOT_PASSWORD);
+    }
+
+    @Transactional
+    public void resetPassword(ResetPasswordRequest request) {
+        // Verify OTP
+        otpService.verifyOtp(request.getEmail(), request.getCode(), com.hcmus.awad_email.model.Otp.OtpType.FORGOT_PASSWORD);
+
+        // Find user and update password
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new BadRequestException("User not found"));
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        user.setUpdatedAt(LocalDateTime.now());
+
+        // If user was Google-only, now they have BOTH
+        if (user.getAuthProvider() == User.AuthProvider.GOOGLE && user.getGoogleId() != null) {
+            user.setAuthProvider(User.AuthProvider.BOTH);
+        } else if (user.getAuthProvider() == null || user.getAuthProvider() == User.AuthProvider.GOOGLE) {
+            user.setAuthProvider(User.AuthProvider.EMAIL);
+        }
+
+        userRepository.save(user);
+
+        // Revoke all refresh tokens for security
+        refreshTokenRepository.deleteByUserId(user.getId());
+    }
+
+    @Transactional
+    public void sendChangePasswordOtp(String userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BadRequestException("User not found"));
+
+        // Check if user has password
+        if (user.getPassword() == null) {
+            throw new BadRequestException("This account uses Google login only. Cannot change password.");
+        }
+
+        // Send OTP for password change
+        otpService.generateAndSendOtp(user.getEmail(), user.getName(), com.hcmus.awad_email.model.Otp.OtpType.CHANGE_PASSWORD);
+    }
+
+    @Transactional
+    public void changePassword(String userId, ChangePasswordRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BadRequestException("User not found"));
+
+        // Verify current password
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+            throw new BadRequestException("Current password is incorrect");
+        }
+
+        // Verify OTP
+        otpService.verifyOtp(user.getEmail(), request.getCode(), com.hcmus.awad_email.model.Otp.OtpType.CHANGE_PASSWORD);
+
+        // Update password
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        user.setUpdatedAt(LocalDateTime.now());
+        userRepository.save(user);
+
+        // Revoke all refresh tokens for security
+        refreshTokenRepository.deleteByUserId(user.getId());
     }
 
     private AuthResponse generateAuthResponse(User user) {

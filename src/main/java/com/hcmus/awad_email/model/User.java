@@ -36,12 +36,15 @@ public class User {
     private LocalDateTime createdAt;
     
     private LocalDateTime updatedAt;
-    
+
     private boolean enabled;
-    
+
+    private boolean verified; // Email verification status
+
     public enum AuthProvider {
         EMAIL,
-        GOOGLE
+        GOOGLE,
+        BOTH // User can login with both email/password and Google
     }
 }
 

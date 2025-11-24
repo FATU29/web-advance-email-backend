@@ -31,6 +31,18 @@ app:
     client-secret: ${GOOGLE_CLIENT_SECRET}
     redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:3000/auth/callback}
 
+  #Brevo
+  api-key:
+    brevo: "${BREVO_API_KEY}"
+  email:
+    sender:
+      email: "${SENDER_EMAIL}"
+      name: "${SENDER_NAME:SmartRent}"
+    subject: "SmartRent"
+  otp:
+    length: 6
+    duration: 60 #s
+
 # Logging
 logging:
   level:

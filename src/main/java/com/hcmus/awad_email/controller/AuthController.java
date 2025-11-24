@@ -21,13 +21,25 @@ public class AuthController {
     private EmailService emailService;
     
     @PostMapping("/signup")
-    public ResponseEntity<ApiResponse<AuthResponse>> signup(@Valid @RequestBody SignupRequest request) {
-        AuthResponse response = authService.signup(request);
-        
+    public ResponseEntity<ApiResponse<Void>> signup(@Valid @RequestBody SignupRequest request) {
+        authService.signup(request);
+        return ResponseEntity.ok(ApiResponse.success("Signup successful. Please check your email for verification code.", null));
+    }
+
+    @PostMapping("/verify-email")
+    public ResponseEntity<ApiResponse<AuthResponse>> verifyEmail(@Valid @RequestBody VerifyOtpRequest request) {
+        AuthResponse response = authService.verifyEmail(request);
+
         // Initialize mock emails for new user
         emailService.initializeMockEmails(response.getUser().getId());
-        
-        return ResponseEntity.ok(ApiResponse.success("User registered successfully", response));
+
+        return ResponseEntity.ok(ApiResponse.success("Email verified successfully", response));
+    }
+
+    @PostMapping("/resend-verification-otp")
+    public ResponseEntity<ApiResponse<Void>> resendVerificationOtp(@Valid @RequestBody SendOtpRequest request) {
+        authService.resendVerificationOtp(request);
+        return ResponseEntity.ok(ApiResponse.success("Verification code sent to your email", null));
     }
     
     @PostMapping("/login")
@@ -82,6 +94,34 @@ public class AuthController {
         TokenIntrospectResponse response = authService.introspectToken(request);
         String message = response.isValid() ? "Token is valid" : "Token is invalid";
         return ResponseEntity.ok(ApiResponse.success(message, response));
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ApiResponse<Void>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        authService.forgotPassword(request);
+        return ResponseEntity.ok(ApiResponse.success("Password reset code sent to your email", null));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<ApiResponse<Void>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return ResponseEntity.ok(ApiResponse.success("Password reset successfully", null));
+    }
+
+    @PostMapping("/send-change-password-otp")
+    public ResponseEntity<ApiResponse<Void>> sendChangePasswordOtp(Authentication authentication) {
+        String userId = (String) authentication.getPrincipal();
+        authService.sendChangePasswordOtp(userId);
+        return ResponseEntity.ok(ApiResponse.success("Verification code sent to your email", null));
+    }
+
+    @PostMapping("/change-password")
+    public ResponseEntity<ApiResponse<Void>> changePassword(
+            Authentication authentication,
+            @Valid @RequestBody ChangePasswordRequest request) {
+        String userId = (String) authentication.getPrincipal();
+        authService.changePassword(userId, request);
+        return ResponseEntity.ok(ApiResponse.success("Password changed successfully", null));
     }
 }
 

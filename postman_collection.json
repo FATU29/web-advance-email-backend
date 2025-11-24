@@ -1,8 +1,9 @@
 {
   "info": {
     "name": "AWAD Email API",
-    "description": "API collection for AWAD Email backend",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    "description": "API collection for AWAD Email backend with OTP verification and password management",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "2.0.0"
   },
   "variable": [
     {
@@ -29,6 +30,16 @@
       "key": "emailId",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "otpCode",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "testEmail",
+      "value": "test@example.com",
+      "type": "string"
     }
   ],
   "item": [
@@ -49,6 +60,28 @@
       "item": [
         {
           "name": "Sign Up",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test User\",\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/signup",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "signup"]
+            },
+            "description": "Sign up with email and password. User will receive OTP via email for verification. Account is disabled until email is verified."
+          }
+        },
+        {
+          "name": "Verify Email",
           "event": [
             {
               "listen": "test",
@@ -56,8 +89,10 @@
                 "exec": [
                   "if (pm.response.code === 200) {",
                   "    var jsonData = pm.response.json();",
-                  "    pm.collectionVariables.set('accessToken', jsonData.data.accessToken);",
-                  "    pm.collectionVariables.set('refreshToken', jsonData.data.refreshToken);",
+                  "    if (jsonData.data) {",
+                  "        pm.collectionVariables.set('accessToken', jsonData.data.accessToken);",
+                  "        pm.collectionVariables.set('refreshToken', jsonData.data.refreshToken);",
+                  "    }",
                   "}"
                 ]
               }
@@ -73,13 +108,36 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Test User\",\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\"\n}"
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"code\": \"{{otpCode}}\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/auth/signup",
+              "raw": "{{baseUrl}}/api/auth/verify-email",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "signup"]
-            }
+              "path": ["api", "auth", "verify-email"]
+            },
+            "description": "Verify email with OTP code received via email. After verification, user receives access and refresh tokens."
+          }
+        },
+        {
+          "name": "Resend Verification OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/resend-verification-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "resend-verification-otp"]
+            },
+            "description": "Resend verification OTP if the previous one expired or was not received."
           }
         },
         {
@@ -108,13 +166,14 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\"\n}"
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"password123\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/login",
               "host": ["{{baseUrl}}"],
               "path": ["api", "auth", "login"]
-            }
+            },
+            "description": "Login with email and password. Note: Account must be verified first. If not verified, use /verify-email endpoint."
           }
         },
         {
@@ -143,13 +202,102 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"credential\": \"GOOGLE_ID_TOKEN_HERE\"\n}"
+              "raw": "{\n  \"code\": \"GOOGLE_AUTHORIZATION_CODE_HERE\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/google",
               "host": ["{{baseUrl}}"],
               "path": ["api", "auth", "google"]
-            }
+            },
+            "description": "Login with Google OAuth. User is automatically verified. If user exists with same email, Google account is linked (authProvider becomes BOTH)."
+          }
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/forgot-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "forgot-password"]
+            },
+            "description": "Request password reset. User will receive OTP via email."
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"code\": \"{{otpCode}}\",\n  \"newPassword\": \"newPassword123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "reset-password"]
+            },
+            "description": "Reset password with OTP code. All refresh tokens are revoked after password reset."
+          }
+        },
+        {
+          "name": "Send Change Password OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/send-change-password-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "send-change-password-otp"]
+            },
+            "description": "Request OTP for password change. Requires authentication. User will receive OTP via email."
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"password123\",\n  \"newPassword\": \"newPassword123\",\n  \"code\": \"{{otpCode}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/change-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "change-password"]
+            },
+            "description": "Change password with OTP verification. Requires authentication. All refresh tokens are revoked after password change."
           }
         },
         {
