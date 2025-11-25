@@ -1,218 +1,183 @@
-# **Assignment: React Authentication (Email+Password \+ Google Sign-In) \+ Email Dashboard Mockup**
+# **React Email Client with Gmail API Integration**
 
-## **Overview**
+## **Goal**
 
-Build a React single-page application that implements secure authentication using **email \+ password** and **Google Sign-In (OAuth)**. After authentication, users land on an **email dashboard** composed of three columns (folders / mailbox list, email list, email detail). The goal is to demonstrate a complete client-side authentication flow (login, token handling, refresh, logout) plus a polished, functional UI mockup for a post-login email dashboard.
+Build a React SPA email client with **Gmail API** integration using Google OAuth2 to access a user's Gmail via the Gmail REST API (read/send/labels/watch).
 
----
-
-## **Objectives**
-
-* Implement email/password login and Google Sign-In integration.
-
-* Understand access tokens vs refresh tokens and secure client handling.
-
-* Configure API communication with token attachment and refresh mechanisms.
-
-* Manage authentication and protected data fetching efficiently.
-
-* Implement form handling and validation for authentication.
-
-* Create protected routes and UI that requires authentication.
-
-* Design and implement a 3-column email dashboard mockup showing realistic interactions.
-
-* Deploy the finished app to a public hosting platform (Netlify, Vercel, Firebase Hosting, etc.) and include the public URL in the README.
+Students must demonstrate secure authentication, correct token handling, and a working inbox that shows real messages, message detail, and basic mailbox actions (reply, delete, mark read, attachments).
 
 ---
 
-## **Requirements**
+## **Objectives (what the student will learn)**
 
-### **Authentication Flow**
-
-1. **Email \+ Password login:**
-
-    * Login page with email and password inputs and client-side validation.
-
-    * On successful login, the server responds with an **access token** and a **refresh token**.
-
-2. **Google Sign-In:**
-
-    * Implement Google Sign-In using OAuth. The app must accept a Google credential/token from the front end and exchange it with your backend (or mock API) for the app's access and refresh tokens.
-
-    * Handle the UI flows for: first-time Google login (create user), returning user, and error states.
-
-3. **Token Usage:**
-
-    * Use the access token to authorize protected API requests (Authorization: Bearer ).
-
-    * Use the refresh token to obtain new access tokens when the access token expires.
-
-### **Token Management**
-
-* Store **access token** in-memory for the session.
-
-* Store **refresh token** in persistent storage (e.g., `localStorage`). Provide a short justification in the README for this choice.
-
-* On logout, clear both tokens and redirect to the login screen.
-
-* If refresh fails (expired/invalid refresh token), force logout and redirect to login.
-
-### **API Communication**
-
-* Configure an API client with token attachment and automatic refresh on unauthorized responses.
-
-* Handle concurrency so multiple simultaneous failed requests trigger only one refresh call.
-
-### **Data Management**
-
-* Use appropriate state management for login, logout, and data fetching.
-
-* Ensure protected resources (e.g., mailbox folders, email list, email details) can only be accessed with valid tokens.
-
-### **Forms**
-
-* Implement client-side validation and error handling for authentication forms.
-
-* Show inline validation errors and server-side authentication errors.
-
-### **Protected Routes**
-
-* Implement route protection (e.g., `PrivateRoute` component) that redirects unauthenticated users to `/login`.
-
-* After login, redirect the user to `/inbox` (the 3-column dashboard).
-
-### **User Interface — Login / Auth Screens**
-
-* `/login` — email/password fields, "Sign in with Google" button, link to Sign Up (optional).
-
-* Show loading indicators and error messages for failed authentication.
-
-### **User Interface — Email Dashboard Mockup (after login)**
-
-Implement a responsive three-column layout for `/inbox` (desktop first; responsive collapse for small screens):
-
-**Column 1 — Mailboxes / Folders (Left, narrow, \~20%)**
-
-* Vertical list: Inbox (with unread count), Starred, Sent, Drafts, Archive, Trash, Custom folders.
-
-* Each folder is a selectable item; selecting a folder updates the middle column's email list.
-
-**Column 2 — Email List (Center, \~40%)**
-
-* Shows a paginated or virtualized list of emails for the selected folder.
-
-* Each email row includes: sender name, subject (single-line ellipsis), short preview (single-line), timestamp, star/important indicator, checkbox for selection.
-
-* Allow selecting an email to open it in the detail pane.
-
-* Provide basic actions above the list: Compose (opens modal), Refresh, Select All, Delete, Mark Read/Unread.
-
-**Column 3 — Email Detail (Right, \~40%)**
-
-* Shows the full email: from, to, cc, subject, received date/time, body (rendered HTML/plain), attachments (if any) with download buttons.
-
-* Action buttons: Reply, Reply All, Forward, Delete, Mark as Unread, Toggle Star.
-
-* If no email is selected, show an empty state mockup: "Select an email to view details".
-
-**UI Requirements & Accessibility**
-
-* Include keyboard accessibility for email navigation.
-
-* Responsive fallback: on small screens, show either list or detail (with a back button) instead of three columns.
-
-* Provide modest styling — readable typography, spacing, and clear affordances.
+* Implement secure OAuth2 flows with Google's Authorization Code flow
+* Differentiate access token vs refresh token; implement safe storage & refresh
+* Build a robust API client with automatic token refresh and concurrency protection
+* Map Gmail concepts (labels, threads) into a responsive 3-column UI
+* Handle attachments, message bodies (HTML/plain), pagination, and search/filter
+* Understand security tradeoffs: Where to store tokens, how to avoid leaking credentials
+* Deploy both frontend and backend; document setup steps
 
 ---
 
-## **Mock Email API (Required)**
+## **Requirements — high level**
 
-Use a **mocked API** for all email-related endpoints. The authentication endpoints can be real or mocked, but the email dashboard must consume mock data only.
+### **Architecture constraints**
 
-You may use static JSON files, a mock API library, or a local mock server to simulate the following endpoints:
+* The React frontend remains a SPA (same /login, /inbox routes)
+* A **backend** is required for Gmail integration:
+  * Backend exchanges Google authorization code for server-side tokens
+  * Stores refresh token securely
+  * Proxies Gmail API calls to the frontend (or issues scoped app tokens)
+* The email dashboard UI must function with 3 columns, actions, accessibility, and responsive behavior populated with real Gmail data
 
-* `GET /mailboxes` — list mailboxes (Inbox, Sent, etc.)
+### **Authentication**
 
-* `GET /mailboxes/:id/emails` — list emails in a mailbox (support pagination or basic filtering)
+* Keep the original email+password login & Google Sign-In for app users (you may reuse the previous mock auth for non-Gmail login)
+* **Important**: Implement full **Google OAuth2 Authorization Code flow** (not just client-side token), with the backend exchanging the code for tokens
+* Frontend should never store Google refresh tokens directly
 
-* `GET /emails/:id` — get email detail
+### **Token storage & security**
 
-The mock API should return realistic sample data, such as sender name, subject, preview text, timestamps, and message body.
+* **Access token**: keep in-memory on frontend; attach as `Authorization: Bearer <token>` to protected API calls
+* **Refresh token**: **must be stored server-side** in a secure datastore (or as HttpOnly, Secure cookie if you implement cookie approach)
+* If you must persist something client-side, justify it explicitly in README (and avoid storing long-lived secrets in localStorage)
+* On logout, clear all tokens server-side and client-side; revoke OAuth refresh tokens where possible
+
+### **Gmail API implementation details**
+
+* **Required OAuth scopes** (examples to request):
+  * `https://www.googleapis.com/auth/gmail.readonly` — read emails (minimal)
+  * `https://www.googleapis.com/auth/gmail.modify` — read + modify (mark read/unread, delete, labels)
+  * `https://www.googleapis.com/auth/gmail.send` — to send/reply
+  * (Optionally) `https://www.googleapis.com/auth/gmail.labels` etc.
+
+* **Backend must**:
+  * Implement Authorization Code flow and keep refresh tokens in a secure store
+  * Provide endpoints the frontend calls (e.g., `GET /api/mailboxes`, `GET /api/mailboxes/:id/emails?page=...`, `GET /api/emails/:id`, `POST /api/emails/send`, `POST /api/labels/:id/toggle`)
+  * Handle token refresh server-side (use stored refresh token to get new access token) and proxy requests to Gmail API
+  * Optionally, implement Gmail Push Notifications (`watch`) for near-real-time updates (stretch)
+
+* **Frontend must**:
+  * Request sign-in; after Google sign-in, the backend attaches the app session tokens and the SPA proceeds to /inbox
+  * Use the app's access token for calling the backend API
+
+### **Feature checklist (minimum)**
+
+* OAuth2 Google login with backend code exchange
+* SPA login page and Google Sign-In flow integrated
+* Backend stores refresh token securely (explain in README)
+* Frontend in-memory access token, persistent refresh token only server-side / HttpOnly cookie
+* API client with automatic retry + single refresh call concurrency handling
+* 3-column email dashboard with:
+  * mailbox list (Gmail labels)
+  * paginated/virtualized email list
+  * email detail with attachments and actions
+* Compose modal, Reply/Forward flow (send via Gmail API)
+* Keyboard navigation and responsive layout with small-screen fallback
+* Error handling: token expiry, failed refresh → forced logout
+* README with deployment steps, security justification, Google Cloud setup notes
+
+---
+
+## **API / Endpoint suggestions (backend)**
+
+Provide these REST endpoints:
+
+```
+POST /api/auth/login            -> app credentials (optional)
+POST /api/auth/google/callback  -> receive code, exchange for tokens, create session
+POST /api/auth/logout
+GET  /api/mailboxes
+GET  /api/mailboxes/:id/emails?page=1&limit=50
+GET  /api/emails/:id
+POST /api/emails/:id/reply
+POST /api/emails/send
+POST /api/emails/:id/modify   -> mark read/unread, star, delete
+GET  /api/attachments/:id     -> stream attachment
+```
+
+**Implementation note**: Backend should authenticate frontend requests (session cookie or JWT) and then proxy to Gmail API. Avoid letting frontend access Gmail API directly with raw Google refresh tokens.
+
+---
+
+## **Concurrency & Token Refresh (must)**
+
+* The backend must centralize refresh logic for Gmail tokens (server-side refresh)
+* If you implement frontend-managed tokens (for non-Google auth), implement concurrency guard: when multiple requests get 401, only one refresh request is in-flight; others wait and then retry with the new token
+* Provide pseudo-code or an implementation for a request queue or a refresh lock in the frontend API client
+
+---
+
+## **Testing & Demo**
+
+* **Demonstrate**:
+  * Login with Google
+  * Inbox populated from a real Gmail account
+  * Open message detail, download attachment, reply and send message
+  * Token expiry simulation: demonstrate refresh works or forced logout if refresh fails
+* Provide a short GIF or video showing these flows
+
+---
+
+## **Deployment & env**
+
+* Deploy frontend (Netlify/Vercel/Firebase)
+* Deploy backend to a platform that supports secure environment variables (Heroku, Render, Railway, Cloud Run)
+* **Sensitive notes**: Never commit client secrets. Use environment variables for:
+  * Google OAuth client ID & secret
+  * Database credentials (if storing tokens)
 
 ---
 
 ## **Deliverables**
 
-1. Source code of the React application in a public Git repository.
-
-2. A `README.md` containing:
-
-    * Setup and run instructions.
-
-    * Public hosting URL and how to reproduce the deployment locally.
-
-    * Explanation of token storage choices and security considerations.
-
-    * Any third-party services used (Google OAuth client, hosting provider).
-
-3. Screenshots or a short walkthrough GIF showing the login flow and the 3-column dashboard.
+1. GitHub repo with frontend + backend (clear monorepo or two repos)
+2. README including:
+  * Setup & run locally
+  * Deployed public URLs (frontend + backend)
+  * How to create Google OAuth credentials and set allowed redirect URIs
+  * Explanation of token storage choices & security considerations
+  * How you simulated token expiry (for demo)
+3. Short demo GIF or video (2–3 minutes) showing login flows and the 3-column UI
+4. Optional: Postman collection for backend endpoints and sample test account config
 
 ---
 
-## **Evaluation Criteria**
+## **Evaluation rubric (suggested weights)**
 
-* **Authentication logic & correctness — 30%**
-
-    * Email/password and Google Sign-In implemented correctly, tokens used for protected calls.
-
-* **Token refresh & API handling — 20%**
-
-    * Proper request/response logic, automatic refresh, and concurrency handling.
-
-* **Mock email API integration — 15%**
-
-    * Mock data endpoints implemented and consumed properly.
-
-* **Form handling & validation — 10%**
-
-    * Input validation, feedback, and error handling.
-
-* **Public hosting & deployment — 10%**
-
-    * App deployed and accessible; README includes the public URL.
-
-* **UI / UX & mockup fidelity — 10%**
-
-    * Clear, usable 3-column dashboard with required features.
-
-* **Error handling & code organization — 5%**
-
-    * Graceful handling of token expiry, failed refresh, network errors; modular code.
+* Gmail API correctness & security — 30%
+* Token handling & refresh logic (including concurrency handling) — 25%
+* Backend proxy & API correctness (mailbox and email endpoints) — 15%
+* Frontend UI: 3-column dashboard fidelity, accessibility — 15%
+* Deployment + README + demo — 10%
+* Code quality & error handling — 5%
 
 ---
 
-## **Stretch Goals (Optional)**
+## **Stretch goals**
 
-* Silent token refresh before expiration (proactive refresh).
-
-* Store refresh token in HttpOnly cookie instead of localStorage and justify implementation.
-
-* Multi-tab logout sync (BroadcastChannel or storage events).
-
-* Offline-capable mailbox caching with stale-while-revalidate pattern.
-
-* Role-based access control (different UIs for standard vs admin users).
+* Implement **Gmail push notifications** (`watch` + Pub/Sub) to update inbox in real time
+* Store refresh tokens in **HttpOnly Secure cookies** and justify the choice (CSRF protections)
+* Implement **multi-tab logout sync** using BroadcastChannel
+* Add offline caching (IndexedDB) + stale-while-revalidate for emails
+* Implement advanced Gmail features: search with operators, batch operations, thread management
 
 ---
 
-## **Submission**
+## **Grading examples / acceptance criteria (concrete)**
 
-* Provide a link to your Git repository and the public deployed URL.
-
-* Include any setup scripts and a short video or GIF demonstrating: login (email), login (Google), token refresh (simulate expiry), logout, and the 3-column email dashboard working.
+* When reviewer logs in via Google, the app shows real Gmail folders and messages from that user's inbox (not mock data)
+* Clicking a message opens full detail, attachments downloadable, reply sends message to recipient
+* If access token expires, the app continues working because backend refreshed token using stored refresh token; no manual re-login needed (unless refresh token invalid)
+* If refresh token is revoked/expired, the app forces logout and clears stored tokens
 
 ---
 
-**Goal:** Build a secure, user-friendly, and well-documented authentication system in React with a realistic post-login email dashboard mockup that consumes a mock email API.
+## **Quick implementation tips**
 
+* Use Google's OAuth2 Authorization Code flow with `offline` access to receive a refresh token
+* Use the official `googleapis` npm package for Node backend Gmail API integration
+* Parse message bodies to handle attachments and HTML/plain variants
+* Virtualize long lists with `react-window` or similar
+* For concurrency guard on frontend API client: maintain a `refreshPromise` variable; if a 401 occurs and `refreshPromise` exists, await it instead of issuing another refresh

@@ -36,12 +36,12 @@ public class AuthService {
     
     @Autowired
     private PasswordEncoder passwordEncoder;
-    
-    @Autowired
-    private MailboxService mailboxService;
 
     @Autowired
     private OtpService otpService;
+
+    @Autowired
+    private GmailService gmailService;
 
     @Value("${app.google.client-id}")
     private String googleClientId;
@@ -70,9 +70,6 @@ public class AuthService {
                 .build();
 
         user = userRepository.save(user);
-
-        // Initialize default mailboxes for the new user
-        mailboxService.initializeDefaultMailboxes(user.getId());
 
         // Send OTP for email verification
         otpService.generateAndSendOtp(user.getEmail(), user.getName(), com.hcmus.awad_email.model.Otp.OtpType.SIGNUP);
@@ -196,14 +193,23 @@ public class AuthService {
                                             .createdAt(LocalDateTime.now())
                                             .updatedAt(LocalDateTime.now())
                                             .build();
-                                    newUser = userRepository.save(newUser);
-
-                                    // Initialize default mailboxes
-                                    mailboxService.initializeDefaultMailboxes(newUser.getId());
-
-                                    return newUser;
+                                    return userRepository.save(newUser);
                                 });
                     });
+
+            // Store Gmail refresh token for API access
+            // Use the already-exchanged tokenResponse to avoid "invalid_grant" error
+            // (authorization codes are single-use only and cannot be exchanged twice)
+            try {
+                gmailService.storeTokensFromResponse(user.getId(), tokenResponse);
+                user.setGmailConnected(true);
+                user.setUpdatedAt(LocalDateTime.now());
+                userRepository.save(user);
+            } catch (Exception e) {
+                // Log but don't fail authentication if Gmail token storage fails
+                // User can still use the app, just without Gmail integration
+                System.err.println("Failed to store Gmail tokens: " + e.getMessage());
+            }
 
             return generateAuthResponse(user);
 

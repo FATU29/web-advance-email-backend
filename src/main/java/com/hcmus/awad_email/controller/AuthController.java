@@ -3,8 +3,9 @@ package com.hcmus.awad_email.controller;
 import com.hcmus.awad_email.dto.auth.*;
 import com.hcmus.awad_email.dto.common.ApiResponse;
 import com.hcmus.awad_email.service.AuthService;
-import com.hcmus.awad_email.service.EmailService;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -13,38 +14,41 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
-    
+
+    private static final Logger log = LoggerFactory.getLogger(AuthController.class);
+
     @Autowired
     private AuthService authService;
     
-    @Autowired
-    private EmailService emailService;
-    
     @PostMapping("/signup")
     public ResponseEntity<ApiResponse<Void>> signup(@Valid @RequestBody SignupRequest request) {
+        log.info("🔐 Signup attempt for email: {}", request.getEmail());
         authService.signup(request);
+        log.info("✅ Signup successful for email: {}", request.getEmail());
         return ResponseEntity.ok(ApiResponse.success("Signup successful. Please check your email for verification code.", null));
     }
 
     @PostMapping("/verify-email")
     public ResponseEntity<ApiResponse<AuthResponse>> verifyEmail(@Valid @RequestBody VerifyOtpRequest request) {
+        log.info("🔐 Email verification attempt for: {}", request.getEmail());
         AuthResponse response = authService.verifyEmail(request);
-
-        // Initialize mock emails for new user
-        emailService.initializeMockEmails(response.getUser().getId());
-
+        log.info("✅ Email verified successfully for: {}", request.getEmail());
         return ResponseEntity.ok(ApiResponse.success("Email verified successfully", response));
     }
 
     @PostMapping("/resend-verification-otp")
     public ResponseEntity<ApiResponse<Void>> resendVerificationOtp(@Valid @RequestBody SendOtpRequest request) {
+        log.info("🔐 Resend verification OTP for: {}", request.getEmail());
         authService.resendVerificationOtp(request);
+        log.info("✅ Verification OTP sent to: {}", request.getEmail());
         return ResponseEntity.ok(ApiResponse.success("Verification code sent to your email", null));
     }
-    
+
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request) {
+        log.info("🔐 Login attempt for email: {}", request.getEmail());
         AuthResponse response = authService.login(request);
+        log.info("✅ Login successful for email: {}", request.getEmail());
         return ResponseEntity.ok(ApiResponse.success("Login successful", response));
     }
     
@@ -54,37 +58,36 @@ public class AuthController {
      */
     @PostMapping("/google")
     public ResponseEntity<ApiResponse<AuthResponse>> googleAuthCodeLogin(@Valid @RequestBody GoogleAuthCodeRequest request) {
+        log.info("🔐 Google OAuth login attempt");
         AuthResponse response = authService.googleAuthCodeLogin(request);
-
-        // Check if this is a new user and initialize mock emails
-        try {
-            emailService.initializeMockEmails(response.getUser().getId());
-        } catch (Exception e) {
-            // Mailboxes might already exist, ignore
-        }
-
+        log.info("✅ Google authentication successful for user: {}", response.getUser().getEmail());
         return ResponseEntity.ok(ApiResponse.success("Google authentication successful", response));
     }
-    
+
     @PostMapping("/refresh")
     public ResponseEntity<ApiResponse<AuthResponse>> refreshToken(@Valid @RequestBody RefreshTokenRequest request) {
+        log.info("🔐 Token refresh attempt");
         AuthResponse response = authService.refreshToken(request);
+        log.info("✅ Token refreshed successfully");
         return ResponseEntity.ok(ApiResponse.success("Token refreshed successfully", response));
     }
-    
+
     @PostMapping("/logout")
     public ResponseEntity<ApiResponse<Void>> logout(
             Authentication authentication,
             @RequestBody(required = false) RefreshTokenRequest request) {
         String userId = (String) authentication.getPrincipal();
+        log.info("🔐 Logout request from user: {}", userId);
         String refreshToken = request != null ? request.getRefreshToken() : null;
         authService.logout(userId, refreshToken);
+        log.info("✅ Logout successful for user: {}", userId);
         return ResponseEntity.ok(ApiResponse.success("Logout successful", null));
     }
 
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<AuthResponse.UserInfo>> getCurrentUser(Authentication authentication) {
         String userId = (String) authentication.getPrincipal();
+        log.debug("📋 Get current user info for: {}", userId);
         AuthResponse.UserInfo userInfo = authService.getUserInfo(userId);
         return ResponseEntity.ok(ApiResponse.success("User info retrieved successfully", userInfo));
     }

@@ -30,6 +30,12 @@ app:
     client-id: ${GOOGLE_CLIENT_ID}
     client-secret: ${GOOGLE_CLIENT_SECRET}
     redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:3000/auth/callback}
+    # Gmail API scopes (automatically requested during OAuth)
+    scopes:
+      - https://www.googleapis.com/auth/gmail.readonly
+      - https://www.googleapis.com/auth/gmail.modify
+      - https://www.googleapis.com/auth/gmail.send
+      - https://www.googleapis.com/auth/gmail.labels
 
   #Brevo
   api-key:
@@ -47,5 +53,9 @@ app:
 logging:
   level:
     com.hcmus.awad_email: ${LOG_LEVEL:INFO}
+    com.hcmus.awad_email.config.RequestLoggingInterceptor: INFO
+    com.hcmus.awad_email.controller: INFO
     org.springframework.security: ${LOG_LEVEL_SECURITY:WARN}
     org.springframework.web: ${LOG_LEVEL_WEB:INFO}
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight(%-5level) %magenta([%thread]) %cyan(%logger{36}) : %msg%n"

@@ -32,9 +32,11 @@ public class User {
     private AuthProvider authProvider; // EMAIL or GOOGLE
     
     private String googleId; // Google user ID for OAuth users
-    
+
+    private boolean gmailConnected; // Whether Gmail API is connected for this user
+
     private LocalDateTime createdAt;
-    
+
     private LocalDateTime updatedAt;
 
     private boolean enabled;

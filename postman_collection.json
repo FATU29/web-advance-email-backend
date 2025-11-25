@@ -488,14 +488,17 @@
               "query": [
                 {
                   "key": "page",
-                  "value": "0"
+                  "value": "0",
+                  "description": "Page number (0-indexed)"
                 },
                 {
                   "key": "size",
-                  "value": "20"
+                  "value": "20",
+                  "description": "Number of emails per page"
                 }
               ]
-            }
+            },
+            "description": "Get paginated list of emails in a specific mailbox. Fetches from Gmail API if connected, otherwise returns mock data."
           }
         },
         {
@@ -512,85 +515,90 @@
               "raw": "{{baseUrl}}/api/emails/{{emailId}}",
               "host": ["{{baseUrl}}"],
               "path": ["api", "emails", "{{emailId}}"]
-            }
+            },
+            "description": "Get detailed information about a specific email. Fetches from Gmail API if connected."
           }
         },
         {
-          "name": "Mark as Read",
+          "name": "Send Email",
           "request": {
-            "method": "PATCH",
+            "method": "POST",
             "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
               {
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}"
               }
             ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": [\"recipient@example.com\"],\n  \"cc\": [],\n  \"bcc\": [],\n  \"subject\": \"Test Email\",\n  \"body\": \"<p>This is a test email sent via Gmail API.</p>\",\n  \"attachmentIds\": []\n}"
+            },
             "url": {
-              "raw": "{{baseUrl}}/api/emails/{{emailId}}/read",
+              "raw": "{{baseUrl}}/api/emails/send",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "emails", "{{emailId}}", "read"]
-            }
+              "path": ["api", "emails", "send"]
+            },
+            "description": "Send a new email via Gmail API. Requires Gmail to be connected."
           }
         },
         {
-          "name": "Mark as Unread",
+          "name": "Reply to Email",
           "request": {
-            "method": "PATCH",
+            "method": "POST",
             "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
               {
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}"
               }
             ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"<p>Thank you for your email. This is my reply.</p>\",\n  \"replyAll\": false,\n  \"attachmentIds\": []\n}"
+            },
             "url": {
-              "raw": "{{baseUrl}}/api/emails/{{emailId}}/unread",
+              "raw": "{{baseUrl}}/api/emails/{{emailId}}/reply",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "emails", "{{emailId}}", "unread"]
-            }
+              "path": ["api", "emails", "{{emailId}}", "reply"]
+            },
+            "description": "Reply to an email via Gmail API. Set replyAll to true to reply to all recipients."
           }
         },
         {
-          "name": "Toggle Star",
+          "name": "Modify Email (Bulk Actions)",
           "request": {
-            "method": "PATCH",
+            "method": "POST",
             "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
               {
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}"
               }
             ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"emailIds\": [\"{{emailId}}\"],\n  \"action\": \"read\"\n}"
+            },
             "url": {
-              "raw": "{{baseUrl}}/api/emails/{{emailId}}/star?starred=true",
+              "raw": "{{baseUrl}}/api/emails/{{emailId}}/modify",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "emails", "{{emailId}}", "star"],
-              "query": [
-                {
-                  "key": "starred",
-                  "value": "true"
-                }
-              ]
-            }
+              "path": ["api", "emails", "{{emailId}}", "modify"]
+            },
+            "description": "Modify email with bulk actions. Actions: read, unread, star, unstar, delete, archive"
           }
         },
         {
-          "name": "Delete Email",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/emails/{{emailId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "emails", "{{emailId}}"]
-            }
-          }
-        },
-        {
-          "name": "Bulk Actions",
+          "name": "Bulk Email Actions",
           "request": {
             "method": "POST",
             "header": [
@@ -611,7 +619,117 @@
               "raw": "{{baseUrl}}/api/emails/actions",
               "host": ["{{baseUrl}}"],
               "path": ["api", "emails", "actions"]
-            }
+            },
+            "description": "Perform bulk actions on multiple emails. Actions: read, unread, star, unstar, delete, archive"
+          }
+        },
+        {
+          "name": "Mark as Read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/emails/{{emailId}}/read",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "emails", "{{emailId}}", "read"]
+            },
+            "description": "Mark a single email as read"
+          }
+        },
+        {
+          "name": "Mark as Unread",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/emails/{{emailId}}/unread",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "emails", "{{emailId}}", "unread"]
+            },
+            "description": "Mark a single email as unread"
+          }
+        },
+        {
+          "name": "Toggle Star",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/emails/{{emailId}}/star?starred=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "emails", "{{emailId}}", "star"],
+              "query": [
+                {
+                  "key": "starred",
+                  "value": "true",
+                  "description": "true to star, false to unstar"
+                }
+              ]
+            },
+            "description": "Star or unstar a single email"
+          }
+        },
+        {
+          "name": "Delete Email",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/emails/{{emailId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "emails", "{{emailId}}"]
+            },
+            "description": "Delete a single email (moves to trash in Gmail)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Attachments",
+      "item": [
+        {
+          "name": "Download Attachment",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/attachments/{{emailId}}/ATTACHMENT_ID?filename=document.pdf",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "attachments", "{{emailId}}", "ATTACHMENT_ID"],
+              "query": [
+                {
+                  "key": "filename",
+                  "value": "document.pdf",
+                  "description": "Optional filename for the downloaded attachment"
+                }
+              ]
+            },
+            "description": "Download an email attachment. Replace ATTACHMENT_ID with the actual attachment ID from the email."
           }
         }
       ]
