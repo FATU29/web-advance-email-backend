@@ -12,17 +12,23 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class PageResponse<T> {
-    
+
     private List<T> content;
-    
+
     private int page;
-    
+
     private int size;
-    
+
     private long totalElements;
-    
+
     private int totalPages;
-    
+
     private boolean last;
+
+    /**
+     * Token for fetching the next page (used for Gmail API pagination)
+     * If null, there are no more pages
+     */
+    private String nextPageToken;
 }
 

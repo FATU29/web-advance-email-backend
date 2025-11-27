@@ -4,6 +4,8 @@ import com.google.api.services.gmail.model.Message;
 import com.hcmus.awad_email.dto.common.PageResponse;
 import com.hcmus.awad_email.dto.email.*;
 import com.hcmus.awad_email.exception.ResourceNotFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +17,8 @@ import java.util.stream.Collectors;
 @Service
 public class EmailService {
 
+    private static final Logger log = LoggerFactory.getLogger(EmailService.class);
+
     @Autowired
     private GmailService gmailService;
 
@@ -22,13 +26,13 @@ public class EmailService {
     private GmailMessageConverter gmailMessageConverter;
 
     public PageResponse<EmailListResponse> getEmailsByMailbox(String userId, String mailboxId,
-                                                               int page, int size) {
+                                                               int page, int size, String pageToken) {
         // Gmail API is required - throw error if not connected
         if (!gmailService.isGmailConnected(userId)) {
             throw new ResourceNotFoundException("Gmail not connected. Please connect your Gmail account first.");
         }
 
-        return getEmailsFromGmail(userId, mailboxId, page, size);
+        return getEmailsFromGmail(userId, mailboxId, page, size, pageToken);
     }
     
     public EmailDetailResponse getEmailById(String userId, String emailId) {
@@ -45,24 +49,41 @@ public class EmailService {
      * Fetch emails from Gmail API
      */
     private PageResponse<EmailListResponse> getEmailsFromGmail(String userId, String mailboxId,
-                                                                 int page, int size) {
+                                                                 int page, int size, String pageToken) {
         // Gmail uses label IDs - we need to map our mailbox ID to Gmail label ID
         // For now, use the mailboxId directly as it should be a Gmail label ID
 
-        List<Message> messages = gmailService.listMessages(userId, mailboxId, (long) size, null);
+        log.debug("🔍 Fetching emails from Gmail | userId: {} | mailboxId: {} | size: {} | pageToken: {}",
+                userId, mailboxId, size, pageToken != null ? pageToken : "null (first page)");
 
-        List<EmailListResponse> content = messages.stream()
+        MessageListResult result = gmailService.listMessages(userId, mailboxId, (long) size, pageToken);
+
+        log.debug("📊 Gmail API response | messages count: {} | nextPageToken: {} | resultSizeEstimate: {}",
+                result.getMessages().size(),
+                result.getNextPageToken() != null ? result.getNextPageToken() : "null (last page)",
+                result.getResultSizeEstimate());
+
+        List<EmailListResponse> content = result.getMessages().stream()
                 .map(gmailMessageConverter::toEmailListResponse)
                 .collect(Collectors.toList());
 
-        // Gmail API doesn't provide total count easily, so we approximate
+        // Calculate pagination metadata
+        // Gmail API provides resultSizeEstimate which is an approximate total count
+        long totalElements = result.getResultSizeEstimate() != null ? result.getResultSizeEstimate() : content.size();
+        int totalPages = (int) Math.ceil((double) totalElements / size);
+        boolean isLast = result.getNextPageToken() == null;
+
+        log.debug("✅ Returning page response | page: {} | size: {} | totalElements: {} | totalPages: {} | isLast: {} | nextPageToken: {}",
+                page, size, totalElements, totalPages, isLast, result.getNextPageToken() != null ? "present" : "null");
+
         return PageResponse.<EmailListResponse>builder()
                 .content(content)
                 .page(page)
                 .size(size)
-                .totalElements((long) content.size())
-                .totalPages(1)
-                .last(content.size() < size)
+                .totalElements(totalElements)
+                .totalPages(totalPages)
+                .last(isLast)
+                .nextPageToken(result.getNextPageToken())
                 .build();
     }
     

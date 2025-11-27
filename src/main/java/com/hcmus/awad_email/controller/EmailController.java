@@ -26,11 +26,14 @@ public class EmailController {
             Authentication authentication,
             @PathVariable String mailboxId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String pageToken) {
         String userId = (String) authentication.getPrincipal();
-        log.info("📧 Get emails for user: {} | mailbox: {} | page: {} | size: {}", userId, mailboxId, page, size);
-        PageResponse<EmailListResponse> emails = emailService.getEmailsByMailbox(userId, mailboxId, page, size);
-        log.debug("✅ Retrieved {} emails for mailbox: {}", emails.getContent().size(), mailboxId);
+        log.info("📧 Get emails for user: {} | mailbox: {} | page: {} | size: {} | pageToken: {}",
+                userId, mailboxId, page, size, pageToken != null ? "present" : "null");
+        PageResponse<EmailListResponse> emails = emailService.getEmailsByMailbox(userId, mailboxId, page, size, pageToken);
+        log.debug("✅ Retrieved {} emails for mailbox: {} | hasNextPage: {}",
+                emails.getContent().size(), mailboxId, emails.getNextPageToken() != null);
         return ResponseEntity.ok(ApiResponse.success(emails));
     }
 

@@ -9,6 +9,7 @@ import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.services.gmail.Gmail;
 import com.google.api.services.gmail.model.*;
+import com.hcmus.awad_email.dto.email.MessageListResult;
 import com.hcmus.awad_email.exception.BadRequestException;
 import com.hcmus.awad_email.exception.UnauthorizedException;
 import com.hcmus.awad_email.model.GoogleToken;
@@ -209,33 +210,46 @@ public class GmailService {
     
     /**
      * List messages in a label/mailbox
+     * Returns MessageListResult with messages, nextPageToken, and resultSizeEstimate
      */
-    public List<Message> listMessages(String userId, String labelId, Long maxResults, String pageToken) {
+    public MessageListResult listMessages(String userId, String labelId, Long maxResults, String pageToken) {
         try {
+            log.debug("📧 Gmail API listMessages | userId: {} | labelId: {} | maxResults: {} | pageToken: {}",
+                    userId, labelId, maxResults, pageToken != null ? pageToken : "null");
+
             Gmail service = getGmailService(userId);
-            
+
             Gmail.Users.Messages.List request = service.users().messages().list("me");
-            
+
             if (labelId != null && !labelId.isEmpty()) {
                 request.setLabelIds(Collections.singletonList(labelId));
             }
-            
+
             if (maxResults != null) {
                 request.setMaxResults(maxResults);
             }
-            
+
             if (pageToken != null && !pageToken.isEmpty()) {
                 request.setPageToken(pageToken);
             }
-            
+
             ListMessagesResponse response = request.execute();
-            
+
+            log.debug("📬 Gmail API response | messages: {} | nextPageToken: {} | resultSizeEstimate: {}",
+                    response.getMessages() != null ? response.getMessages().size() : 0,
+                    response.getNextPageToken() != null ? response.getNextPageToken() : "null",
+                    response.getResultSizeEstimate());
+
             if (response.getMessages() == null) {
-                return Collections.emptyList();
+                return MessageListResult.builder()
+                        .messages(Collections.emptyList())
+                        .nextPageToken(null)
+                        .resultSizeEstimate(0L)
+                        .build();
             }
-            
+
             // Fetch full message details
-            return response.getMessages().stream()
+            List<Message> messages = response.getMessages().stream()
                     .map(msg -> {
                         try {
                             return service.users().messages().get("me", msg.getId())
@@ -248,7 +262,13 @@ public class GmailService {
                     })
                     .filter(Objects::nonNull)
                     .collect(Collectors.toList());
-            
+
+            return MessageListResult.builder()
+                    .messages(messages)
+                    .nextPageToken(response.getNextPageToken())
+                    .resultSizeEstimate(response.getResultSizeEstimate())
+                    .build();
+
         } catch (IOException e) {
             log.error("Failed to list Gmail messages", e);
             throw new BadRequestException("Failed to fetch emails: " + e.getMessage());
