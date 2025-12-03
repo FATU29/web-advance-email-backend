@@ -25,6 +25,11 @@ app:
     access-token-expiration-ms: ${JWT_ACCESS_TOKEN_EXPIRATION:3600000}
     refresh-token-expiration-ms: ${JWT_REFRESH_TOKEN_EXPIRATION:86400000}
 
+  # Cookie Configuration for Refresh Token
+  cookie:
+    secure: ${COOKIE_SECURE:true}  # Set to false for local development without HTTPS
+    same-site: ${COOKIE_SAME_SITE:None}  # None for cross-origin, Lax for same-site
+
   # Google OAuth Configuration
   google:
     client-id: ${GOOGLE_CLIENT_ID}
@@ -47,7 +52,7 @@ app:
     subject: "SmartRent"
   otp:
     length: 6
-    duration: 60 #s
+    duration: "${OTP_DURATION:300}" #s
 
 # Logging
 logging:

@@ -8,11 +8,15 @@ import java.util.Optional;
 
 @Repository
 public interface RefreshTokenRepository extends MongoRepository<RefreshToken, String> {
-    
-    Optional<RefreshToken> findByToken(String token);
-    
+
+    /**
+     * Find refresh token by its hashed value.
+     * The token field now stores SHA-256 hash of the actual token.
+     */
+    Optional<RefreshToken> findByTokenHash(String tokenHash);
+
     void deleteByUserId(String userId);
-    
-    void deleteByToken(String token);
+
+    void deleteByTokenHash(String tokenHash);
 }
 

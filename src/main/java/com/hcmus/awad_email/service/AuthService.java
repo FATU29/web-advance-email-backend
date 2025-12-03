@@ -13,6 +13,7 @@ import com.hcmus.awad_email.model.User;
 import com.hcmus.awad_email.repository.RefreshTokenRepository;
 import com.hcmus.awad_email.repository.UserRepository;
 import com.hcmus.awad_email.security.JwtTokenProvider;
+import com.hcmus.awad_email.util.TokenHashUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -218,9 +219,17 @@ public class AuthService {
         }
     }
 
+    /**
+     * Refresh access token using the refresh token string.
+     * The refresh token is now received from HttpOnly cookie, not request body.
+     * Token is hashed before lookup for security.
+     */
     @Transactional
-    public AuthResponse refreshToken(RefreshTokenRequest request) {
-        RefreshToken refreshToken = refreshTokenRepository.findByToken(request.getRefreshToken())
+    public AuthResponse refreshToken(String refreshTokenStr) {
+        // Hash the incoming token to look up in database
+        String tokenHash = TokenHashUtil.hashToken(refreshTokenStr);
+
+        RefreshToken refreshToken = refreshTokenRepository.findByTokenHash(tokenHash)
                 .orElseThrow(() -> new UnauthorizedException("Invalid refresh token"));
 
         if (refreshToken.isRevoked()) {
@@ -240,7 +249,7 @@ public class AuthService {
 
         return AuthResponse.builder()
                 .accessToken(accessToken)
-                .refreshToken(refreshToken.getToken())
+                .refreshToken(refreshTokenStr) // Return the original token (not hash) for cookie
                 .tokenType("Bearer")
                 .expiresIn(tokenProvider.getAccessTokenExpirationMs() / 1000)
                 .user(AuthResponse.UserInfo.builder()
@@ -251,11 +260,13 @@ public class AuthService {
                         .build())
                 .build();
     }
-    
+
     @Transactional
     public void logout(String userId, String refreshTokenStr) {
         if (refreshTokenStr != null) {
-            refreshTokenRepository.deleteByToken(refreshTokenStr);
+            // Hash the token before deletion lookup
+            String tokenHash = TokenHashUtil.hashToken(refreshTokenStr);
+            refreshTokenRepository.deleteByTokenHash(tokenHash);
         } else {
             refreshTokenRepository.deleteByUserId(userId);
         }
@@ -361,9 +372,12 @@ public class AuthService {
         String accessToken = tokenProvider.generateAccessToken(user.getId(), user.getEmail(), user.getName(), user.getProfilePicture());
         String refreshTokenStr = tokenProvider.generateRefreshToken(user.getId());
 
-        // Save refresh token to database
+        // Hash the refresh token before storing in database
+        String tokenHash = TokenHashUtil.hashToken(refreshTokenStr);
+
+        // Save hashed refresh token to database
         RefreshToken refreshToken = RefreshToken.builder()
-                .token(refreshTokenStr)
+                .tokenHash(tokenHash)
                 .userId(user.getId())
                 .expiryDate(LocalDateTime.now().plusSeconds(tokenProvider.getRefreshTokenExpirationMs() / 1000))
                 .createdAt(LocalDateTime.now())
@@ -372,6 +386,8 @@ public class AuthService {
 
         refreshTokenRepository.save(refreshToken);
 
+        // Return the plain token to be sent to client (via HttpOnly cookie)
+        // The database only stores the hash
         return AuthResponse.builder()
                 .accessToken(accessToken)
                 .refreshToken(refreshTokenStr)
