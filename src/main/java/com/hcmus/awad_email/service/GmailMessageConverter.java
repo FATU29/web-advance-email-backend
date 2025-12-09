@@ -239,11 +239,57 @@ public class GmailMessageConverter {
         if (emailListString == null || emailListString.isEmpty()) {
             return Collections.emptyList();
         }
-        
+
         return Arrays.stream(emailListString.split(","))
                 .map(this::extractEmail)
                 .filter(email -> !email.isEmpty())
                 .collect(Collectors.toList());
+    }
+
+    // ==================== Public Helper Methods ====================
+
+    /**
+     * Get a specific header value from a Gmail message.
+     */
+    public String getHeader(Message message, String headerName) {
+        Map<String, String> headers = extractHeaders(message);
+        return headers.getOrDefault(headerName, null);
+    }
+
+    /**
+     * Get the body content of a Gmail message.
+     */
+    public String getBody(Message message) {
+        return extractBody(message);
+    }
+
+    /**
+     * Get the received timestamp of a Gmail message.
+     */
+    public LocalDateTime getReceivedAt(Message message) {
+        if (message.getInternalDate() == null) {
+            return null;
+        }
+        return LocalDateTime.ofInstant(
+                Instant.ofEpochMilli(message.getInternalDate()),
+                ZoneId.systemDefault()
+        );
+    }
+
+    /**
+     * Check if a Gmail message is read.
+     */
+    public boolean isRead(Message message) {
+        List<String> labelIds = message.getLabelIds() != null ? message.getLabelIds() : Collections.emptyList();
+        return !labelIds.contains("UNREAD");
+    }
+
+    /**
+     * Check if a Gmail message is starred.
+     */
+    public boolean isStarred(Message message) {
+        List<String> labelIds = message.getLabelIds() != null ? message.getLabelIds() : Collections.emptyList();
+        return labelIds.contains("STARRED");
     }
 }
 

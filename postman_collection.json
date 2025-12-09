@@ -713,6 +713,285 @@
           }
         }
       ]
+    },
+    {
+      "name": "Kanban Board",
+      "item": [
+        {
+          "name": "Get Full Board",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/kanban/board",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "kanban", "board"]
+            },
+            "description": "Get the full Kanban board with all columns and their emails. Initializes default columns (Inbox, To Do, In Progress, Done, Snoozed) if not exists."
+          }
+        },
+        {
+          "name": "Get Columns",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/kanban/columns",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "kanban", "columns"]
+            },
+            "description": "Get all Kanban columns for the user."
+          }
+        },
+        {
+          "name": "Create Column",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Review\",\n  \"color\": \"#9C27B0\",\n  \"order\": 5\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/kanban/columns",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "kanban", "columns"]
+            },
+            "description": "Create a new custom Kanban column."
+          }
+        },
+        {
+          "name": "Update Column",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\",\n  \"color\": \"#FF5722\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/kanban/columns/COLUMN_ID",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "kanban", "columns", "COLUMN_ID"]
+            },
+            "description": "Update a Kanban column. Replace COLUMN_ID with actual column ID."
+          }
+        },
+        {
+          "name": "Delete Column",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/kanban/columns/COLUMN_ID",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "kanban", "columns", "COLUMN_ID"]
+            },
+            "description": "Delete a custom Kanban column. Default columns cannot be deleted. Emails in deleted column are moved to Inbox."
+          }
+        },
+        {
+          "name": "Get Emails in Column",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/kanban/columns/COLUMN_ID/emails",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "kanban", "columns", "COLUMN_ID", "emails"]
+            },
+            "description": "Get all emails in a specific Kanban column."
+          }
+        },
+        {
+          "name": "Add Email to Kanban",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"emailId\": \"{{emailId}}\",\n  \"columnId\": null,\n  \"generateSummary\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/kanban/emails",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "kanban", "emails"]
+            },
+            "description": "Add an email to the Kanban board. If columnId is null, email is added to Inbox. Set generateSummary to true to generate AI summary."
+          }
+        },
+        {
+          "name": "Get Email Kanban Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/kanban/emails/{{emailId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "kanban", "emails", "{{emailId}}"]
+            },
+            "description": "Get the Kanban status of a specific email including column, summary, and snooze info."
+          }
+        },
+        {
+          "name": "Move Email (Drag & Drop)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"emailId\": \"{{emailId}}\",\n  \"targetColumnId\": \"TARGET_COLUMN_ID\",\n  \"newOrder\": 0\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/kanban/emails/move",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "kanban", "emails", "move"]
+            },
+            "description": "Move an email to a different column (drag-and-drop). Updates the email's status in the backend."
+          }
+        },
+        {
+          "name": "Remove Email from Kanban",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/kanban/emails/{{emailId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "kanban", "emails", "{{emailId}}"]
+            },
+            "description": "Remove an email from the Kanban board."
+          }
+        },
+        {
+          "name": "Snooze Email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"emailId\": \"{{emailId}}\",\n  \"snoozeUntil\": \"2024-12-10T09:00:00\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/kanban/emails/snooze",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "kanban", "emails", "snooze"]
+            },
+            "description": "Snooze an email until a specific time. Email is moved to Snoozed column and automatically restored when snooze expires."
+          }
+        },
+        {
+          "name": "Unsnooze Email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/kanban/emails/{{emailId}}/unsnooze",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "kanban", "emails", "{{emailId}}", "unsnooze"]
+            },
+            "description": "Manually unsnooze an email before the snooze time expires. Email is restored to its previous column."
+          }
+        },
+        {
+          "name": "Generate AI Summary",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/kanban/emails/{{emailId}}/summarize",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "kanban", "emails", "{{emailId}}", "summarize"]
+            },
+            "description": "Generate or regenerate AI summary for an email using Gemini API. Requires GEMINI_API_KEY to be configured."
+          }
+        }
+      ]
     }
   ]
 }
