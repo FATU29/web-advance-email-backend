@@ -45,6 +45,7 @@ public class KanbanColumn {
     
     public enum ColumnType {
         INBOX,      // Default inbox column
+        BACKLOG,    // Backlog column for new Gmail emails
         TODO,       // To Do column
         IN_PROGRESS, // In Progress column
         DONE,       // Done/Completed column

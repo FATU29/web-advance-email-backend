@@ -2,13 +2,54 @@
 
 ## 📋 Overview
 
-The Kanban Board APIs allow you to organize emails into a visual workflow with columns like **Inbox**, **To Do**, **In Progress**, **Done**, and **Snoozed**.
+The Kanban Board APIs allow you to organize emails into a visual workflow with columns like **Inbox**, **Backlog**, **To Do**, **In Progress**, **Done**, and **Snoozed**.
 
 ### Key Features:
+- **Gmail Sync** - Sync emails from Gmail to Kanban board (cached in database for performance)
 - **Drag-and-drop** email movement between columns
 - **Snooze/Deferral** mechanism to temporarily hide emails
 - **AI Summarization** using Google Gemini API
 - **Custom columns** creation and management
+- **Fast loading** - Emails are cached in database, Gmail API only called when syncing
+
+---
+
+## 📧 Gmail Integration & Default Column Behavior
+
+### How Gmail Sync Works:
+1. When a user logs in with Google OAuth, their Gmail account is connected
+2. Call `POST /api/kanban/sync` or `GET /api/kanban/board?sync=true` to sync emails from Gmail
+3. **New emails from Gmail INBOX are automatically placed in the Kanban BACKLOG column**
+4. Emails already in the Kanban board are skipped during sync
+5. **Emails are cached in database** - subsequent board loads are fast (no Gmail API calls)
+
+### Default Column for New Emails:
+- **BACKLOG** column is the default destination for all synced Gmail emails
+- Users can then drag-and-drop emails to other columns (TODO, IN_PROGRESS, DONE)
+- The BACKLOG column acts as the entry point for email workflow management
+
+### Performance Optimization:
+- **First load**: If no cached emails exist, automatically syncs from Gmail
+- **Normal load** (`sync=false`): Fast load from database cache
+- **Refresh** (`sync=true`): Fetches new emails from Gmail, stores in cache, then returns
+
+### Recommended Frontend Flow:
+```javascript
+// 1. Check if Gmail is connected
+const statusRes = await fetch('/api/kanban/gmail-status', { headers });
+const { data: { connected } } = await statusRes.json();
+
+if (connected) {
+  // 2. Get board (first time will auto-sync, subsequent calls use cache)
+  // Use sync=true to explicitly fetch new emails from Gmail
+  const boardRes = await fetch('/api/kanban/board?sync=false&maxEmails=50', { headers });
+  const { data: board } = await boardRes.json();
+  // Board contains cached emails, new emails in BACKLOG column
+} else {
+  // Prompt user to connect Gmail
+  window.location.href = '/api/auth/google/authorize';
+}
+```
 
 ---
 
@@ -30,11 +71,22 @@ const headers = {
 ### Board Operations
 
 #### 1. Get Full Kanban Board
-Returns all columns and their emails in a single request.
+Returns all columns and their emails in a single request. Uses cached emails from database for fast loading.
 
 ```
-GET /api/kanban/board
+GET /api/kanban/board?sync=false&maxEmails=50
 ```
+
+**Query Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `sync` | boolean | `false` | If `true`, syncs new Gmail emails to cache before returning the board |
+| `maxEmails` | integer | `50` | Maximum emails to display/sync (max: 100) |
+
+**Behavior:**
+- **First call (no cached emails)**: Automatically syncs from Gmail
+- **`sync=false`**: Fast load from database cache (recommended for normal use)
+- **`sync=true`**: Fetches new emails from Gmail, stores in cache, then returns
 
 **Response:**
 ```json
@@ -44,10 +96,10 @@ GET /api/kanban/board
     "columns": [
       {
         "id": "column_id",
-        "name": "Inbox",
-        "type": "INBOX",
-        "order": 0,
-        "color": "#2196F3",
+        "name": "Backlog",
+        "type": "BACKLOG",
+        "order": 1,
+        "color": "#9E9E9E",
         "isDefault": true,
         "emailCount": 5
       }
@@ -68,6 +120,53 @@ GET /api/kanban/board
         }
       ]
     }
+  }
+}
+```
+
+---
+
+### Gmail Sync Operations
+
+#### 1.1 Sync Gmail Emails to Kanban
+Manually sync Gmail INBOX emails to the Kanban board. New emails are placed in the **BACKLOG** column by default and cached in database.
+
+```
+POST /api/kanban/sync?maxEmails=50
+```
+
+**Query Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `maxEmails` | integer | `50` | Maximum emails to sync (max: 100) |
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Successfully synced 10 emails to Kanban board.",
+  "data": {
+    "synced": 10,
+    "skipped": 5,
+    "total": 15,
+    "message": "Successfully synced 10 emails to Kanban board."
+  }
+}
+```
+
+#### 1.2 Check Gmail Connection Status
+Check if the user has connected their Gmail account.
+
+```
+GET /api/kanban/gmail-status
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "connected": true
   }
 }
 ```
@@ -107,7 +206,7 @@ PUT /api/kanban/columns/{columnId}
 ```
 
 #### 5. Delete Column
-Emails in deleted column are automatically moved to Inbox.
+Emails in deleted column are automatically moved to Backlog.
 ```
 DELETE /api/kanban/columns/{columnId}
 ```
@@ -133,7 +232,7 @@ POST /api/kanban/emails
   "generateSummary": true
 }
 ```
-- `columnId`: Target column ID (null = Inbox)
+- `columnId`: Target column ID (null = Backlog)
 - `generateSummary`: Generate AI summary on add
 
 #### 8. Get Email Kanban Status
@@ -210,6 +309,8 @@ const API_URL = 'http://localhost:8080';
 function KanbanBoard({ accessToken }) {
   const [board, setBoard] = useState({ columns: [], emailsByColumn: {} });
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [gmailConnected, setGmailConnected] = useState(false);
 
   const headers = {
     'Authorization': `Bearer ${accessToken}`,
@@ -217,8 +318,43 @@ function KanbanBoard({ accessToken }) {
   };
 
   useEffect(() => {
-    fetchBoard();
+    checkGmailAndFetchBoard();
   }, []);
+
+  const checkGmailAndFetchBoard = async () => {
+    try {
+      // Check Gmail connection status
+      const statusRes = await fetch(`${API_URL}/api/kanban/gmail-status`, { headers });
+      const { data: { connected } } = await statusRes.json();
+      setGmailConnected(connected);
+
+      // Fetch board from cache (first time will auto-sync from Gmail)
+      // Use sync=false for fast loading, sync=true only when user clicks refresh
+      const res = await fetch(`${API_URL}/api/kanban/board?sync=false&maxEmails=50`, { headers });
+      const { data } = await res.json();
+      setBoard(data);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleManualSync = async () => {
+    setSyncing(true);
+    try {
+      const res = await fetch(`${API_URL}/api/kanban/sync?maxEmails=50`, {
+        method: 'POST',
+        headers
+      });
+      const { data } = await res.json();
+      alert(`Synced ${data.synced} emails (${data.skipped} skipped)`);
+      // Refresh board after sync
+      const boardRes = await fetch(`${API_URL}/api/kanban/board`, { headers });
+      const { data: boardData } = await boardRes.json();
+      setBoard(boardData);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const fetchBoard = async () => {
     try {
@@ -286,10 +422,24 @@ function KanbanBoard({ accessToken }) {
   if (loading) return <div>Loading...</div>;
 
   return (
-    <DragDropContext onDragEnd={handleDragEnd}>
-      <div className="kanban-board" style={{ display: 'flex', gap: '16px', padding: '16px' }}>
-        {board.columns.map(column => (
-          <div key={column.id} className="kanban-column" style={{
+    <div>
+      {/* Sync Button */}
+      <div style={{ padding: '16px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+        {gmailConnected ? (
+          <button onClick={handleManualSync} disabled={syncing}>
+            {syncing ? '🔄 Syncing...' : '🔄 Sync Gmail'}
+          </button>
+        ) : (
+          <span style={{ color: '#f44336' }}>
+            ⚠️ Gmail not connected. <a href="/api/auth/google/authorize">Connect Gmail</a>
+          </span>
+        )}
+      </div>
+
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <div className="kanban-board" style={{ display: 'flex', gap: '16px', padding: '16px' }}>
+          {board.columns.map(column => (
+            <div key={column.id} className="kanban-column" style={{
             minWidth: '300px',
             backgroundColor: '#f4f5f7',
             borderRadius: '8px',
@@ -374,8 +524,9 @@ function KanbanBoard({ accessToken }) {
             </Droppable>
           </div>
         ))}
-      </div>
-    </DragDropContext>
+        </div>
+      </DragDropContext>
+    </div>
   );
 }
 
@@ -388,11 +539,12 @@ export default KanbanBoard;
 
 | Type | Description | Default Color | Deletable |
 |------|-------------|---------------|-----------|
-| `INBOX` | New emails | `#2196F3` (Blue) | No |
+| `INBOX` | User's inbox | `#2196F3` (Blue) | No |
+| `BACKLOG` | **Default for new synced emails** | `#9E9E9E` (Gray) | No |
 | `TODO` | Emails to process | `#FF9800` (Orange) | No |
 | `IN_PROGRESS` | Currently working on | `#9C27B0` (Purple) | No |
 | `DONE` | Completed | `#4CAF50` (Green) | No |
-| `SNOOZED` | Temporarily hidden | `#607D8B` (Gray) | No |
+| `SNOOZED` | Temporarily hidden | `#607D8B` (Blue Gray) | No |
 | `CUSTOM` | User-created columns | User-defined | Yes |
 
 ---
@@ -403,7 +555,7 @@ export default KanbanBoard;
 interface KanbanColumnResponse {
   id: string;
   name: string;
-  type: 'INBOX' | 'TODO' | 'IN_PROGRESS' | 'DONE' | 'SNOOZED' | 'CUSTOM';
+  type: 'INBOX' | 'BACKLOG' | 'TODO' | 'IN_PROGRESS' | 'DONE' | 'SNOOZED' | 'CUSTOM';
   order: number;
   color: string;
   isDefault: boolean;
@@ -464,6 +616,17 @@ interface UpdateColumnRequest {
   name?: string;
   color?: string;
   order?: number;
+}
+
+interface KanbanSyncResult {
+  synced: number;      // Number of emails successfully synced
+  skipped: number;     // Number of emails skipped (already in Kanban)
+  total: number;       // Total emails processed from Gmail
+  message: string;     // Human-readable result message
+}
+
+interface GmailStatusResponse {
+  connected: boolean;  // Whether Gmail is connected for the user
 }
 ```
 

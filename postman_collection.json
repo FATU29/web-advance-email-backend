@@ -728,11 +728,66 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/kanban/board",
+              "raw": "{{baseUrl}}/api/kanban/board?maxEmails=50&sync=false",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "kanban", "board"]
+              "path": ["api", "kanban", "board"],
+              "query": [
+                {
+                  "key": "maxEmails",
+                  "value": "50",
+                  "description": "Maximum emails to display (default: 50, max: 100)"
+                },
+                {
+                  "key": "sync",
+                  "value": "false",
+                  "description": "If true, sync new emails from Gmail before returning (default: false). Set to true to fetch latest emails."
+                }
+              ]
             },
-            "description": "Get the full Kanban board with all columns and their emails. Initializes default columns (Inbox, To Do, In Progress, Done, Snoozed) if not exists."
+            "description": "Get the full Kanban board with all columns and emails. Uses cached emails from database for fast loading. Set sync=true to fetch new emails from Gmail first. On first call (no cached emails), automatically syncs from Gmail. Default columns: Inbox, Backlog, To Do, In Progress, Done, Snoozed."
+          }
+        },
+        {
+          "name": "Sync Gmail Emails",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/kanban/sync?maxEmails=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "kanban", "sync"],
+              "query": [
+                {
+                  "key": "maxEmails",
+                  "value": "50",
+                  "description": "Maximum emails to sync (default: 50, max: 100)"
+                }
+              ]
+            },
+            "description": "Sync Gmail emails to the Kanban board. Creates EmailKanbanStatus records for new emails and places them in the Backlog column."
+          }
+        },
+        {
+          "name": "Get Gmail Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/kanban/gmail-status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "kanban", "gmail-status"]
+            },
+            "description": "Check if Gmail is connected for the user. Returns { connected: true/false }."
           }
         },
         {
@@ -820,7 +875,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "kanban", "columns", "COLUMN_ID"]
             },
-            "description": "Delete a custom Kanban column. Default columns cannot be deleted. Emails in deleted column are moved to Inbox."
+            "description": "Delete a custom Kanban column. Default columns cannot be deleted. Emails in deleted column are moved to Backlog."
           }
         },
         {
@@ -864,7 +919,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "kanban", "emails"]
             },
-            "description": "Add an email to the Kanban board. If columnId is null, email is added to Inbox. Set generateSummary to true to generate AI summary."
+            "description": "Add an email to the Kanban board. If columnId is null, email is added to Backlog. Set generateSummary to true to generate AI summary."
           }
         },
         {

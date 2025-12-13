@@ -21,17 +21,67 @@ public class KanbanController {
     private KanbanService kanbanService;
     
     // ==================== Board Operations ====================
-    
+
     /**
      * Get the full Kanban board with all columns and emails.
+     * Uses cached emails from database for fast loading.
+     * Set sync=true to fetch new emails from Gmail first.
+     *
+     * @param maxEmails Maximum emails to display (default: 50, max: 100)
+     * @param sync If true, sync new emails from Gmail before returning (default: false)
      */
     @GetMapping("/board")
-    public ResponseEntity<ApiResponse<KanbanBoardResponse>> getBoard(Authentication authentication) {
+    public ResponseEntity<ApiResponse<KanbanBoardResponse>> getBoard(
+            Authentication authentication,
+            @RequestParam(required = false, defaultValue = "50") Integer maxEmails,
+            @RequestParam(required = false, defaultValue = "false") Boolean sync) {
         String userId = (String) authentication.getPrincipal();
-        log.info("📋 Get Kanban board for user: {}", userId);
-        KanbanBoardResponse board = kanbanService.getBoard(userId);
+        log.info("📋 Get Kanban board for user: {} (maxEmails: {}, sync: {})", userId, maxEmails, sync);
+
+        // Limit max emails to 100
+        int limitedMax = Math.min(maxEmails != null ? maxEmails : 50, 100);
+
+        KanbanBoardResponse board = kanbanService.getBoard(userId, limitedMax, sync != null && sync);
         return ResponseEntity.ok(ApiResponse.success(board));
     }
+
+    // ==================== Gmail Sync Operations ====================
+
+    /**
+     * Sync Gmail emails to the Kanban board.
+     * New emails from Gmail INBOX are automatically added to the Kanban INBOX column.
+     *
+     * @param maxEmails Maximum number of emails to sync (default 50, max 100)
+     */
+    @PostMapping("/sync")
+    public ResponseEntity<ApiResponse<KanbanSyncResult>> syncGmailEmails(
+            Authentication authentication,
+            @RequestParam(required = false, defaultValue = "50") Integer maxEmails) {
+        String userId = (String) authentication.getPrincipal();
+        log.info("📋 Sync Gmail emails to Kanban for user: {} (max: {})", userId, maxEmails);
+
+        // Limit max emails to 100
+        int limit = Math.min(maxEmails != null ? maxEmails : 50, 100);
+
+        KanbanSyncResult result = kanbanService.syncGmailEmails(userId, limit);
+        return ResponseEntity.ok(ApiResponse.success(result.getMessage(), result));
+    }
+
+    /**
+     * Check if Gmail is connected for the user.
+     */
+    @GetMapping("/gmail-status")
+    public ResponseEntity<ApiResponse<GmailStatusResponse>> getGmailStatus(Authentication authentication) {
+        String userId = (String) authentication.getPrincipal();
+        boolean connected = kanbanService.isGmailConnected(userId);
+        GmailStatusResponse status = new GmailStatusResponse(connected);
+        return ResponseEntity.ok(ApiResponse.success(status));
+    }
+
+    /**
+     * Simple response for Gmail connection status.
+     */
+    public record GmailStatusResponse(boolean connected) {}
     
     // ==================== Column Operations ====================
     

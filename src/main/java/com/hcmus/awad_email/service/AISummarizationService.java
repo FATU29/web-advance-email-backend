@@ -9,135 +9,103 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
- * Service for generating email summaries using AI (Gemini API).
+ * Service for generating email summaries using AI (OpenAI via external AI service).
  * Provides concise summaries of email content for quick decision-making.
  */
 @Service
 @Slf4j
 public class AISummarizationService {
-    
-    @Value("${app.gemini.api-key:}")
-    private String geminiApiKey;
-    
-    @Value("${app.gemini.model:gemini-1.5-flash}")
-    private String geminiModel;
-    
+
+    @Value("${app.ai-service.base-url:http://localhost:8000}")
+    private String aiServiceBaseUrl;
+
+    @Value("${app.ai-service.timeout-seconds:30}")
+    private int timeoutSeconds;
+
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
-    
-    private static final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s";
-    
-    private static final String SUMMARY_PROMPT = """
-        You are an email assistant. Summarize the following email in 2-3 concise sentences.
-        Focus on the main purpose, any action items, and key information.
-        Keep the summary professional and easy to scan quickly.
-        
-        Email Subject: %s
-        From: %s
-        
-        Email Content:
-        %s
-        
-        Summary:
-        """;
-    
+
+    private static final String SUMMARIZE_ENDPOINT = "/api/v1/email/summarize";
+
     public AISummarizationService() {
         this.restTemplate = new RestTemplate();
         this.objectMapper = new ObjectMapper();
     }
-    
+
     /**
-     * Generate a summary for an email using Gemini API.
-     * 
+     * Generate a summary for an email using the external AI service (OpenAI).
+     *
      * @param subject Email subject
      * @param from Sender information
      * @param body Email body content
      * @return Generated summary or null if generation fails
      */
     public String generateSummary(String subject, String from, String body) {
-        if (geminiApiKey == null || geminiApiKey.isEmpty()) {
-            log.warn("Gemini API key not configured. Skipping summary generation.");
+        if (aiServiceBaseUrl == null || aiServiceBaseUrl.isEmpty()) {
+            log.warn("AI service URL not configured. Skipping summary generation.");
             return null;
         }
-        
+
         try {
-            // Clean and truncate body if too long (Gemini has token limits)
+            // Clean and truncate body if too long
             String cleanBody = cleanEmailBody(body);
             if (cleanBody.length() > 10000) {
                 cleanBody = cleanBody.substring(0, 10000) + "...";
             }
-            
-            String prompt = String.format(SUMMARY_PROMPT, 
-                    subject != null ? subject : "(No Subject)",
-                    from != null ? from : "Unknown",
-                    cleanBody);
-            
-            String url = String.format(GEMINI_API_URL, geminiModel, geminiApiKey);
-            
-            // Build request body
-            Map<String, Object> requestBody = buildGeminiRequest(prompt);
-            
+
+            String url = aiServiceBaseUrl + SUMMARIZE_ENDPOINT;
+
+            // Build request body for the AI service
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("subject", subject != null ? subject : "(No Subject)");
+            requestBody.put("from_email", from != null ? from : "Unknown");
+            requestBody.put("body", cleanBody);
+            // Don't set max_length to let AI generate complete summary without truncation
+
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            
+
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
-            
+
+            log.debug("Calling AI service at {} for email summarization", url);
+
             ResponseEntity<String> response = restTemplate.exchange(
                     url, HttpMethod.POST, entity, String.class);
-            
+
             if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
                 return extractSummaryFromResponse(response.getBody());
             }
-            
+
             log.error("Failed to generate summary. Status: {}", response.getStatusCode());
             return null;
-            
+
         } catch (Exception e) {
-            log.error("Error generating email summary: {}", e.getMessage());
+            log.error("Error generating email summary: {}", e.getMessage(), e);
             return null;
         }
     }
-    
-    private Map<String, Object> buildGeminiRequest(String prompt) {
-        Map<String, Object> textPart = new HashMap<>();
-        textPart.put("text", prompt);
-        
-        Map<String, Object> parts = new HashMap<>();
-        parts.put("parts", List.of(textPart));
-        
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("contents", List.of(parts));
-        
-        // Add generation config for better summaries
-        Map<String, Object> generationConfig = new HashMap<>();
-        generationConfig.put("temperature", 0.3);
-        generationConfig.put("maxOutputTokens", 200);
-        requestBody.put("generationConfig", generationConfig);
-        
-        return requestBody;
-    }
-    
+
+    /**
+     * Extract summary from AI service response.
+     * Expected response format: {"summary": "..."}
+     */
     private String extractSummaryFromResponse(String responseBody) {
         try {
             JsonNode root = objectMapper.readTree(responseBody);
-            JsonNode candidates = root.path("candidates");
-            if (candidates.isArray() && candidates.size() > 0) {
-                JsonNode content = candidates.get(0).path("content");
-                JsonNode parts = content.path("parts");
-                if (parts.isArray() && parts.size() > 0) {
-                    return parts.get(0).path("text").asText().trim();
-                }
+            JsonNode summaryNode = root.path("summary");
+            if (!summaryNode.isMissingNode() && summaryNode.isTextual()) {
+                return summaryNode.asText().trim();
             }
+            log.warn("Unexpected response format from AI service: {}", responseBody);
         } catch (Exception e) {
-            log.error("Error parsing Gemini response: {}", e.getMessage());
+            log.error("Error parsing AI service response: {}", e.getMessage());
         }
         return null;
     }
-    
+
     /**
      * Clean HTML tags and excessive whitespace from email body.
      */

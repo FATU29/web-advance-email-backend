@@ -1,6 +1,7 @@
 package com.hcmus.awad_email.service;
 
 import com.google.api.services.gmail.model.Message;
+import com.hcmus.awad_email.dto.email.MessageListResult;
 import com.hcmus.awad_email.dto.kanban.*;
 import com.hcmus.awad_email.exception.BadRequestException;
 import com.hcmus.awad_email.exception.ResourceNotFoundException;
@@ -50,27 +51,31 @@ public class KanbanService {
         
         List<KanbanColumn> defaultColumns = new ArrayList<>();
         LocalDateTime now = LocalDateTime.now();
-        
+
         defaultColumns.add(KanbanColumn.builder()
                 .userId(userId).name("Inbox").type(KanbanColumn.ColumnType.INBOX)
                 .order(0).color("#4285F4").isDefault(true).createdAt(now).updatedAt(now).build());
-        
+
+        defaultColumns.add(KanbanColumn.builder()
+                .userId(userId).name("Backlog").type(KanbanColumn.ColumnType.BACKLOG)
+                .order(1).color("#9C27B0").isDefault(true).createdAt(now).updatedAt(now).build());
+
         defaultColumns.add(KanbanColumn.builder()
                 .userId(userId).name("To Do").type(KanbanColumn.ColumnType.TODO)
-                .order(1).color("#FBBC04").isDefault(true).createdAt(now).updatedAt(now).build());
-        
+                .order(2).color("#FBBC04").isDefault(true).createdAt(now).updatedAt(now).build());
+
         defaultColumns.add(KanbanColumn.builder()
                 .userId(userId).name("In Progress").type(KanbanColumn.ColumnType.IN_PROGRESS)
-                .order(2).color("#FF6D01").isDefault(true).createdAt(now).updatedAt(now).build());
-        
+                .order(3).color("#FF6D01").isDefault(true).createdAt(now).updatedAt(now).build());
+
         defaultColumns.add(KanbanColumn.builder()
                 .userId(userId).name("Done").type(KanbanColumn.ColumnType.DONE)
-                .order(3).color("#34A853").isDefault(true).createdAt(now).updatedAt(now).build());
-        
+                .order(4).color("#34A853").isDefault(true).createdAt(now).updatedAt(now).build());
+
         defaultColumns.add(KanbanColumn.builder()
                 .userId(userId).name("Snoozed").type(KanbanColumn.ColumnType.SNOOZED)
-                .order(4).color("#9E9E9E").isDefault(true).createdAt(now).updatedAt(now).build());
-        
+                .order(5).color("#9E9E9E").isDefault(true).createdAt(now).updatedAt(now).build());
+
         return columnRepository.saveAll(defaultColumns);
     }
     
@@ -141,14 +146,15 @@ public class KanbanService {
             throw new BadRequestException("Cannot delete default columns");
         }
         
-        // Move emails to Inbox before deleting
-        KanbanColumn inboxColumn = columnRepository.findByUserIdAndType(userId, KanbanColumn.ColumnType.INBOX)
-                .orElseThrow(() -> new ResourceNotFoundException("Inbox column not found"));
+        // Move emails to Backlog before deleting (fall back to Inbox for backward compatibility)
+        KanbanColumn targetColumn = columnRepository.findByUserIdAndType(userId, KanbanColumn.ColumnType.BACKLOG)
+                .orElseGet(() -> columnRepository.findByUserIdAndType(userId, KanbanColumn.ColumnType.INBOX)
+                        .orElseThrow(() -> new ResourceNotFoundException("No suitable column found")));
         
         List<EmailKanbanStatus> emails = emailStatusRepository
                 .findByUserIdAndColumnIdOrderByOrderInColumnAsc(userId, columnId);
         for (EmailKanbanStatus email : emails) {
-            email.setColumnId(inboxColumn.getId());
+            email.setColumnId(targetColumn.getId());
             email.setUpdatedAt(LocalDateTime.now());
         }
         emailStatusRepository.saveAll(emails);
@@ -170,17 +176,70 @@ public class KanbanService {
 
     /**
      * Get the full Kanban board with all columns and emails.
+     * Uses cached emails from database for performance. Call with sync=true to fetch new emails from Gmail.
+     *
+     * @param userId The user ID
+     * @param maxEmails Maximum emails to fetch/display (default 50)
+     * @param sync If true, sync new emails from Gmail first
      */
-    public KanbanBoardResponse getBoard(String userId) {
+    public KanbanBoardResponse getBoard(String userId, Integer maxEmails, boolean sync) {
+        int limit = maxEmails != null ? maxEmails : 50;
+
+        // Get columns
         List<KanbanColumnResponse> columns = getColumns(userId);
         Map<String, List<KanbanEmailResponse>> emailsByColumn = new HashMap<>();
 
+        // Initialize empty lists for all columns
         for (KanbanColumnResponse column : columns) {
-            List<EmailKanbanStatus> emails = emailStatusRepository
-                    .findByUserIdAndColumnIdOrderByOrderInColumnAsc(userId, column.getId());
-            emailsByColumn.put(column.getId(),
-                    emails.stream().map(this::toEmailResponse).collect(Collectors.toList()));
+            emailsByColumn.put(column.getId(), new ArrayList<>());
         }
+
+        // If sync is requested and Gmail is connected, sync new emails first
+        if (sync && gmailService.isGmailConnected(userId)) {
+            syncGmailEmails(userId, limit);
+        }
+
+        // Load all emails from database (cached)
+        List<EmailKanbanStatus> allStatuses = emailStatusRepository.findByUserId(userId);
+
+        if (allStatuses.isEmpty()) {
+            // No cached emails - if Gmail is connected, do initial sync
+            if (gmailService.isGmailConnected(userId)) {
+                log.info("No cached emails found for user {}, performing initial sync", userId);
+                syncGmailEmails(userId, limit);
+                allStatuses = emailStatusRepository.findByUserId(userId);
+            }
+        }
+
+        // Convert cached statuses to KanbanEmailResponse
+        for (EmailKanbanStatus status : allStatuses) {
+            KanbanEmailResponse emailResponse = toEmailResponse(status);
+
+            String columnId = status.getColumnId();
+            // Add to appropriate column
+            if (emailsByColumn.containsKey(columnId)) {
+                emailsByColumn.get(columnId).add(emailResponse);
+            } else {
+                // Column doesn't exist (maybe deleted), find backlog
+                String backlogColumnId = columns.stream()
+                        .filter(c -> c.getType() == KanbanColumn.ColumnType.BACKLOG)
+                        .map(KanbanColumnResponse::getId)
+                        .findFirst()
+                        .orElseGet(() -> columns.stream()
+                                .filter(c -> c.getType() == KanbanColumn.ColumnType.INBOX)
+                                .map(KanbanColumnResponse::getId)
+                                .findFirst()
+                                .orElse(columns.get(0).getId()));
+                emailsByColumn.get(backlogColumnId).add(emailResponse);
+            }
+        }
+
+        // Sort emails in each column by orderInColumn
+        for (List<KanbanEmailResponse> emails : emailsByColumn.values()) {
+            emails.sort(Comparator.comparingInt(KanbanEmailResponse::getOrderInColumn));
+        }
+
+        log.info("Loaded Kanban board for user {} with {} cached emails (sync={})", userId, allStatuses.size(), sync);
 
         return KanbanBoardResponse.builder()
                 .columns(columns)
@@ -189,15 +248,58 @@ public class KanbanService {
     }
 
     /**
+     * Get the full Kanban board with all columns and emails (no sync).
+     */
+    public KanbanBoardResponse getBoard(String userId, Integer maxEmails) {
+        return getBoard(userId, maxEmails, false);
+    }
+
+    /**
+     * Get the full Kanban board with default max emails.
+     */
+    public KanbanBoardResponse getBoard(String userId) {
+        return getBoard(userId, 50);
+    }
+
+    /**
+     * Build KanbanEmailResponse from Gmail Message.
+     */
+    private KanbanEmailResponse buildKanbanEmailResponse(Message gmailMessage, String columnId, int orderInColumn,
+                                                          String summary, LocalDateTime summaryGeneratedAt,
+                                                          boolean snoozed, LocalDateTime snoozeUntil) {
+        String from = gmailMessageConverter.getHeader(gmailMessage, "From");
+        String fromName = extractName(from);
+        String fromEmail = extractEmail(from);
+        String subject = gmailMessageConverter.getHeader(gmailMessage, "Subject");
+        String snippet = gmailMessage.getSnippet() != null ? gmailMessage.getSnippet() : "";
+        String preview = snippet.length() > 200 ? snippet.substring(0, 200) : snippet;
+
+        return KanbanEmailResponse.builder()
+                .id(gmailMessage.getId()) // Use Gmail message ID as the ID
+                .emailId(gmailMessage.getId())
+                .columnId(columnId)
+                .orderInColumn(orderInColumn)
+                .subject(subject != null ? subject : "(No Subject)")
+                .fromEmail(fromEmail)
+                .fromName(fromName)
+                .preview(preview)
+                .receivedAt(gmailMessageConverter.getReceivedAt(gmailMessage))
+                .isRead(gmailMessageConverter.isRead(gmailMessage))
+                .isStarred(gmailMessageConverter.isStarred(gmailMessage))
+                .summary(summary)
+                .summaryGeneratedAt(summaryGeneratedAt)
+                .snoozed(snoozed)
+                .snoozeUntil(snoozeUntil)
+                .build();
+    }
+
+    /**
      * Get emails in a specific column.
+     * Fetches from Gmail and filters by column.
      */
     public List<KanbanEmailResponse> getEmailsInColumn(String userId, String columnId) {
-        columnRepository.findByIdAndUserId(columnId, userId)
-                .orElseThrow(() -> new ResourceNotFoundException("Column not found"));
-
-        List<EmailKanbanStatus> emails = emailStatusRepository
-                .findByUserIdAndColumnIdOrderByOrderInColumnAsc(userId, columnId);
-        return emails.stream().map(this::toEmailResponse).collect(Collectors.toList());
+        KanbanBoardResponse board = getBoard(userId);
+        return board.getEmailsByColumn().getOrDefault(columnId, Collections.emptyList());
     }
 
     /**
@@ -210,12 +312,13 @@ public class KanbanService {
             throw new BadRequestException("Email is already on the Kanban board");
         }
 
-        // Determine target column
+        // Determine target column (default to Backlog, fall back to Inbox for backward compatibility)
         String columnId = request.getColumnId();
         if (columnId == null || columnId.isEmpty()) {
-            KanbanColumn inboxColumn = columnRepository.findByUserIdAndType(userId, KanbanColumn.ColumnType.INBOX)
-                    .orElseGet(() -> initializeDefaultColumns(userId).get(0));
-            columnId = inboxColumn.getId();
+            KanbanColumn defaultColumn = columnRepository.findByUserIdAndType(userId, KanbanColumn.ColumnType.BACKLOG)
+                    .orElseGet(() -> columnRepository.findByUserIdAndType(userId, KanbanColumn.ColumnType.INBOX)
+                            .orElseGet(() -> initializeDefaultColumns(userId).get(1))); // Index 1 is Backlog
+            columnId = defaultColumn.getId();
         } else {
             columnRepository.findByIdAndUserId(columnId, userId)
                     .orElseThrow(() -> new ResourceNotFoundException("Column not found"));
@@ -272,14 +375,46 @@ public class KanbanService {
 
     /**
      * Move an email to a different column (drag-and-drop).
+     * Creates an EmailKanbanStatus record if it doesn't exist.
      */
     @Transactional
     public KanbanEmailResponse moveEmail(String userId, MoveEmailRequest request) {
-        EmailKanbanStatus status = emailStatusRepository.findByUserIdAndEmailId(userId, request.getEmailId())
-                .orElseThrow(() -> new ResourceNotFoundException("Email not found on Kanban board"));
-
         KanbanColumn targetColumn = columnRepository.findByIdAndUserId(request.getTargetColumnId(), userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Target column not found"));
+
+        // Get or create EmailKanbanStatus
+        EmailKanbanStatus status = emailStatusRepository.findByUserIdAndEmailId(userId, request.getEmailId())
+                .orElseGet(() -> {
+                    // Create a new status record for this email
+                    Message gmailMessage;
+                    try {
+                        gmailMessage = gmailService.getMessage(userId, request.getEmailId());
+                    } catch (Exception e) {
+                        throw new ResourceNotFoundException("Email not found in Gmail");
+                    }
+
+                    String from = gmailMessageConverter.getHeader(gmailMessage, "From");
+                    String subject = gmailMessageConverter.getHeader(gmailMessage, "Subject");
+                    String snippet = gmailMessage.getSnippet() != null ? gmailMessage.getSnippet() : "";
+                    String preview = snippet.length() > 200 ? snippet.substring(0, 200) : snippet;
+
+                    return EmailKanbanStatus.builder()
+                            .userId(userId)
+                            .emailId(request.getEmailId())
+                            .columnId(request.getTargetColumnId())
+                            .orderInColumn(0)
+                            .subject(subject != null ? subject : "(No Subject)")
+                            .fromEmail(extractEmail(from))
+                            .fromName(extractName(from))
+                            .preview(preview)
+                            .receivedAt(gmailMessageConverter.getReceivedAt(gmailMessage))
+                            .isRead(gmailMessageConverter.isRead(gmailMessage))
+                            .isStarred(gmailMessageConverter.isStarred(gmailMessage))
+                            .snoozed(false)
+                            .createdAt(LocalDateTime.now())
+                            .updatedAt(LocalDateTime.now())
+                            .build();
+                });
 
         // If moving to Snoozed column without snooze time, reject
         if (targetColumn.getType() == KanbanColumn.ColumnType.SNOOZED && !status.isSnoozed()) {
@@ -346,18 +481,57 @@ public class KanbanService {
 
     /**
      * Snooze an email until a specific time.
+     * Creates an EmailKanbanStatus record if it doesn't exist.
      */
     @Transactional
     public KanbanEmailResponse snoozeEmail(String userId, SnoozeEmailRequest request) {
-        EmailKanbanStatus status = emailStatusRepository.findByUserIdAndEmailId(userId, request.getEmailId())
-                .orElseThrow(() -> new ResourceNotFoundException("Email not found on Kanban board"));
-
         // Get or create Snoozed column
         KanbanColumn snoozedColumn = columnRepository.findByUserIdAndType(userId, KanbanColumn.ColumnType.SNOOZED)
                 .orElseGet(() -> {
                     initializeDefaultColumns(userId);
                     return columnRepository.findByUserIdAndType(userId, KanbanColumn.ColumnType.SNOOZED)
                             .orElseThrow(() -> new ResourceNotFoundException("Snoozed column not found"));
+                });
+
+        // Get Backlog column for previousColumnId if creating new status
+        String backlogColumnId = columnRepository.findByUserIdAndType(userId, KanbanColumn.ColumnType.BACKLOG)
+                .map(KanbanColumn::getId)
+                .orElseGet(() -> columnRepository.findByUserIdAndType(userId, KanbanColumn.ColumnType.INBOX)
+                        .map(KanbanColumn::getId)
+                        .orElse(null));
+
+        // Get or create EmailKanbanStatus
+        EmailKanbanStatus status = emailStatusRepository.findByUserIdAndEmailId(userId, request.getEmailId())
+                .orElseGet(() -> {
+                    // Create a new status record for this email
+                    Message gmailMessage;
+                    try {
+                        gmailMessage = gmailService.getMessage(userId, request.getEmailId());
+                    } catch (Exception e) {
+                        throw new ResourceNotFoundException("Email not found in Gmail");
+                    }
+
+                    String from = gmailMessageConverter.getHeader(gmailMessage, "From");
+                    String subject = gmailMessageConverter.getHeader(gmailMessage, "Subject");
+                    String snippet = gmailMessage.getSnippet() != null ? gmailMessage.getSnippet() : "";
+                    String preview = snippet.length() > 200 ? snippet.substring(0, 200) : snippet;
+
+                    return EmailKanbanStatus.builder()
+                            .userId(userId)
+                            .emailId(request.getEmailId())
+                            .columnId(backlogColumnId) // Will be updated to snoozed column
+                            .orderInColumn(0)
+                            .subject(subject != null ? subject : "(No Subject)")
+                            .fromEmail(extractEmail(from))
+                            .fromName(extractName(from))
+                            .preview(preview)
+                            .receivedAt(gmailMessageConverter.getReceivedAt(gmailMessage))
+                            .isRead(gmailMessageConverter.isRead(gmailMessage))
+                            .isStarred(gmailMessageConverter.isStarred(gmailMessage))
+                            .snoozed(false)
+                            .createdAt(LocalDateTime.now())
+                            .updatedAt(LocalDateTime.now())
+                            .build();
                 });
 
         // Store previous column for restoration
@@ -431,17 +605,60 @@ public class KanbanService {
 
     /**
      * Generate or regenerate AI summary for an email.
+     * Creates an EmailKanbanStatus record if it doesn't exist (places email in Backlog).
      */
     @Transactional
     public KanbanEmailResponse generateSummary(String userId, String emailId) {
+        // Fetch email from Gmail first to verify it exists
+        Message gmailMessage;
+        try {
+            gmailMessage = gmailService.getMessage(userId, emailId);
+        } catch (Exception e) {
+            throw new ResourceNotFoundException("Email not found in Gmail");
+        }
+
+        // Get or create EmailKanbanStatus
         EmailKanbanStatus status = emailStatusRepository.findByUserIdAndEmailId(userId, emailId)
-                .orElseThrow(() -> new ResourceNotFoundException("Email not found on Kanban board"));
+                .orElseGet(() -> {
+                    // Create a new status record for this email (place in Backlog)
+                    KanbanColumn backlogColumn = columnRepository.findByUserIdAndType(userId, KanbanColumn.ColumnType.BACKLOG)
+                            .orElseGet(() -> columnRepository.findByUserIdAndType(userId, KanbanColumn.ColumnType.INBOX)
+                                    .orElseGet(() -> initializeDefaultColumns(userId).get(1)));
 
-        // Fetch email from Gmail to get full body
-        Message gmailMessage = gmailService.getMessage(userId, emailId);
+                    String from = gmailMessageConverter.getHeader(gmailMessage, "From");
+                    String subject = gmailMessageConverter.getHeader(gmailMessage, "Subject");
+                    String snippet = gmailMessage.getSnippet() != null ? gmailMessage.getSnippet() : "";
+                    String preview = snippet.length() > 200 ? snippet.substring(0, 200) : snippet;
+
+                    EmailKanbanStatus newStatus = EmailKanbanStatus.builder()
+                            .userId(userId)
+                            .emailId(emailId)
+                            .columnId(backlogColumn.getId())
+                            .orderInColumn(0)
+                            .subject(subject != null ? subject : "(No Subject)")
+                            .fromEmail(extractEmail(from))
+                            .fromName(extractName(from))
+                            .preview(preview)
+                            .receivedAt(gmailMessageConverter.getReceivedAt(gmailMessage))
+                            .isRead(gmailMessageConverter.isRead(gmailMessage))
+                            .isStarred(gmailMessageConverter.isStarred(gmailMessage))
+                            .snoozed(false)
+                            .createdAt(LocalDateTime.now())
+                            .updatedAt(LocalDateTime.now())
+                            .build();
+
+                    return emailStatusRepository.save(newStatus);
+                });
+
+        // Get email body for summary generation
         String body = gmailMessageConverter.getBody(gmailMessage);
+        String subject = gmailMessageConverter.getHeader(gmailMessage, "Subject");
+        String from = gmailMessageConverter.getHeader(gmailMessage, "From");
 
-        String summary = aiSummarizationService.generateSummary(status.getSubject(), status.getFromEmail(), body);
+        String summary = aiSummarizationService.generateSummary(
+                subject != null ? subject : status.getSubject(),
+                extractEmail(from) != null ? extractEmail(from) : status.getFromEmail(),
+                body);
 
         if (summary != null) {
             status.setSummary(summary);
@@ -470,11 +687,171 @@ public class KanbanService {
 
     /**
      * Get a single email's Kanban status.
+     * If no status exists, fetches from Gmail and returns with Backlog column.
      */
     public KanbanEmailResponse getEmailStatus(String userId, String emailId) {
-        EmailKanbanStatus status = emailStatusRepository.findByUserIdAndEmailId(userId, emailId)
-                .orElseThrow(() -> new ResourceNotFoundException("Email not found on Kanban board"));
-        return toEmailResponse(status);
+        // Check if status exists
+        Optional<EmailKanbanStatus> statusOpt = emailStatusRepository.findByUserIdAndEmailId(userId, emailId);
+
+        if (statusOpt.isPresent()) {
+            return toEmailResponse(statusOpt.get());
+        }
+
+        // No status exists - fetch from Gmail and return with Backlog column
+        if (!gmailService.isGmailConnected(userId)) {
+            throw new ResourceNotFoundException("Email not found on Kanban board");
+        }
+
+        try {
+            Message gmailMessage = gmailService.getMessage(userId, emailId);
+
+            // Find Backlog column
+            String backlogColumnId = columnRepository.findByUserIdAndType(userId, KanbanColumn.ColumnType.BACKLOG)
+                    .map(KanbanColumn::getId)
+                    .orElseGet(() -> columnRepository.findByUserIdAndType(userId, KanbanColumn.ColumnType.INBOX)
+                            .map(KanbanColumn::getId)
+                            .orElse(null));
+
+            if (backlogColumnId == null) {
+                List<KanbanColumn> columns = initializeDefaultColumns(userId);
+                backlogColumnId = columns.get(1).getId(); // Index 1 is Backlog
+            }
+
+            return buildKanbanEmailResponse(gmailMessage, backlogColumnId, 0, null, null, false, null);
+        } catch (Exception e) {
+            throw new ResourceNotFoundException("Email not found in Gmail");
+        }
+    }
+
+    // ==================== Gmail Sync Operations ====================
+
+    /**
+     * Sync Gmail emails to the Kanban board.
+     * New emails are placed in the BACKLOG column by default (falls back to INBOX for backward compatibility).
+     *
+     * @param userId The user ID
+     * @param maxEmails Maximum number of emails to sync (default 50)
+     * @return SyncResult containing counts of synced and skipped emails
+     */
+    @Transactional
+    public KanbanSyncResult syncGmailEmails(String userId, Integer maxEmails) {
+        // Check if Gmail is connected
+        if (!gmailService.isGmailConnected(userId)) {
+            log.warn("Gmail not connected for user {}, skipping sync", userId);
+            return KanbanSyncResult.builder()
+                    .synced(0)
+                    .skipped(0)
+                    .total(0)
+                    .message("Gmail not connected. Please connect your Gmail account first.")
+                    .build();
+        }
+
+        int limit = maxEmails != null ? maxEmails : 50;
+
+        // Initialize columns if needed
+        List<KanbanColumn> existingColumns = columnRepository.findByUserIdOrderByOrderAsc(userId);
+        final List<KanbanColumn> columns = existingColumns.isEmpty()
+                ? initializeDefaultColumns(userId)
+                : existingColumns;
+
+        // Get the BACKLOG column (default column for new Gmail emails)
+        // Fall back to INBOX if BACKLOG doesn't exist (for backward compatibility)
+        KanbanColumn targetColumn = columns.stream()
+                .filter(c -> c.getType() == KanbanColumn.ColumnType.BACKLOG)
+                .findFirst()
+                .orElseGet(() -> columns.stream()
+                        .filter(c -> c.getType() == KanbanColumn.ColumnType.INBOX)
+                        .findFirst()
+                        .orElseThrow(() -> new ResourceNotFoundException("No suitable column found for syncing emails")));
+
+        // Fetch emails from Gmail INBOX
+        MessageListResult gmailResult = gmailService.listMessages(userId, "INBOX", (long) limit, null);
+        List<Message> gmailMessages = gmailResult.getMessages();
+
+        if (gmailMessages.isEmpty()) {
+            return KanbanSyncResult.builder()
+                    .synced(0)
+                    .skipped(0)
+                    .total(0)
+                    .message("No emails found in Gmail inbox.")
+                    .build();
+        }
+
+        // Get existing email IDs in Kanban
+        List<String> gmailEmailIds = gmailMessages.stream()
+                .map(Message::getId)
+                .collect(Collectors.toList());
+
+        Set<String> existingEmailIds = emailStatusRepository.findByUserIdAndEmailIdIn(userId, gmailEmailIds)
+                .stream()
+                .map(EmailKanbanStatus::getEmailId)
+                .collect(Collectors.toSet());
+
+        int synced = 0;
+        int skipped = 0;
+        int currentOrder = (int) emailStatusRepository.countByUserIdAndColumnId(userId, targetColumn.getId());
+        LocalDateTime now = LocalDateTime.now();
+
+        for (Message gmailMessage : gmailMessages) {
+            String emailId = gmailMessage.getId();
+
+            // Skip if already in Kanban
+            if (existingEmailIds.contains(emailId)) {
+                skipped++;
+                continue;
+            }
+
+            try {
+                // Extract email metadata
+                String subject = gmailMessageConverter.getHeader(gmailMessage, "Subject");
+                String from = gmailMessageConverter.getHeader(gmailMessage, "From");
+                String fromName = extractName(from);
+                String fromEmail = extractEmail(from);
+                String snippet = gmailMessage.getSnippet() != null ? gmailMessage.getSnippet() : "";
+                String preview = snippet.length() > 200 ? snippet.substring(0, 200) : snippet;
+
+                EmailKanbanStatus status = EmailKanbanStatus.builder()
+                        .userId(userId)
+                        .emailId(emailId)
+                        .columnId(targetColumn.getId())
+                        .orderInColumn(currentOrder++)
+                        .subject(subject != null ? subject : "(No Subject)")
+                        .fromEmail(fromEmail)
+                        .fromName(fromName)
+                        .preview(preview)
+                        .receivedAt(gmailMessageConverter.getReceivedAt(gmailMessage))
+                        .isRead(gmailMessageConverter.isRead(gmailMessage))
+                        .isStarred(gmailMessageConverter.isStarred(gmailMessage))
+                        .snoozed(false)
+                        .createdAt(now)
+                        .updatedAt(now)
+                        .build();
+
+                emailStatusRepository.save(status);
+                synced++;
+
+            } catch (Exception e) {
+                log.error("Failed to sync email {} for user {}: {}", emailId, userId, e.getMessage());
+                skipped++;
+            }
+        }
+
+        log.info("Synced {} emails to Kanban board (column: {}) for user {} ({} skipped)",
+                synced, targetColumn.getName(), userId, skipped);
+
+        return KanbanSyncResult.builder()
+                .synced(synced)
+                .skipped(skipped)
+                .total(gmailMessages.size())
+                .message(String.format("Successfully synced %d emails to Kanban board (Backlog).", synced))
+                .build();
+    }
+
+    /**
+     * Check if Gmail is connected for the user.
+     */
+    public boolean isGmailConnected(String userId) {
+        return gmailService.isGmailConnected(userId);
     }
 }
 

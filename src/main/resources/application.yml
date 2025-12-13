@@ -42,10 +42,10 @@ app:
       - https://www.googleapis.com/auth/gmail.send
       - https://www.googleapis.com/auth/gmail.labels
 
-  # Gemini AI Configuration (for email summarization)
-  gemini:
-    api-key: ${GEMINI_API_KEY:}
-    model: ${GEMINI_MODEL:gemini-1.5-flash}
+  # AI Service Configuration (for email summarization using OpenAI)
+  ai-service:
+    base-url: ${AI_SERVICE_URL:http://localhost:8000}
+    timeout-seconds: ${AI_SERVICE_TIMEOUT:30}
 
   #Brevo
   api-key:
