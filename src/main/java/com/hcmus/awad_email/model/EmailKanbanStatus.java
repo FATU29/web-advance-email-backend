@@ -62,9 +62,11 @@ public class EmailKanbanStatus {
     private LocalDateTime receivedAt;
     
     private boolean isRead;
-    
+
     private boolean isStarred;
-    
+
+    private boolean hasAttachments;
+
     private LocalDateTime createdAt;
     
     private LocalDateTime updatedAt;

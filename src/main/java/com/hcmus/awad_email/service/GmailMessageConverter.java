@@ -165,11 +165,11 @@ public class GmailMessageConverter {
     /**
      * Check if message has attachments
      */
-    private boolean hasAttachments(Message message) {
+    public boolean hasAttachments(Message message) {
         if (message.getPayload() == null || message.getPayload().getParts() == null) {
             return false;
         }
-        
+
         return message.getPayload().getParts().stream()
                 .anyMatch(part -> part.getFilename() != null && !part.getFilename().isEmpty());
     }

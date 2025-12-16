@@ -2,6 +2,7 @@ package com.hcmus.awad_email.controller;
 
 import com.hcmus.awad_email.dto.common.ApiResponse;
 import com.hcmus.awad_email.dto.kanban.*;
+import com.hcmus.awad_email.service.FuzzySearchService;
 import com.hcmus.awad_email.service.KanbanService;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
@@ -16,9 +17,12 @@ import java.util.List;
 @RequestMapping("/api/kanban")
 @Slf4j
 public class KanbanController {
-    
+
     @Autowired
     private KanbanService kanbanService;
+
+    @Autowired
+    private FuzzySearchService fuzzySearchService;
     
     // ==================== Board Operations ====================
 
@@ -43,6 +47,97 @@ public class KanbanController {
 
         KanbanBoardResponse board = kanbanService.getBoard(userId, limitedMax, sync != null && sync);
         return ResponseEntity.ok(ApiResponse.success(board));
+    }
+
+    /**
+     * Get the Kanban board with filtering and sorting options.
+     * Supports sorting by date (newest/oldest) or sender name,
+     * and filtering by unread status, attachments, or sender.
+     *
+     * Query Parameters:
+     * - sortBy: "date_newest" (default), "date_oldest", "sender_name"
+     * - unreadOnly: true/false (default: false)
+     * - hasAttachmentsOnly: true/false (default: false)
+     * - fromSender: partial match on sender email or name
+     * - columnId: filter by specific column
+     * - maxEmailsPerColumn: max emails per column (default: 50, max: 100)
+     */
+    @GetMapping("/board/filter")
+    public ResponseEntity<ApiResponse<KanbanBoardResponse>> getBoardWithFilters(
+            Authentication authentication,
+            @RequestParam(required = false, defaultValue = "date_newest") String sortBy,
+            @RequestParam(required = false) Boolean unreadOnly,
+            @RequestParam(required = false) Boolean hasAttachmentsOnly,
+            @RequestParam(required = false) String fromSender,
+            @RequestParam(required = false) String columnId,
+            @RequestParam(required = false, defaultValue = "50") Integer maxEmailsPerColumn) {
+        String userId = (String) authentication.getPrincipal();
+        log.info("📋 Get filtered Kanban board for user: {} (sortBy: {}, unreadOnly: {}, hasAttachmentsOnly: {}, fromSender: {})",
+                userId, sortBy, unreadOnly, hasAttachmentsOnly, fromSender);
+
+        KanbanFilterRequest filterRequest = KanbanFilterRequest.builder()
+                .sortBy(sortBy)
+                .unreadOnly(unreadOnly)
+                .hasAttachmentsOnly(hasAttachmentsOnly)
+                .fromSender(fromSender)
+                .columnId(columnId)
+                .maxEmailsPerColumn(maxEmailsPerColumn)
+                .build();
+
+        KanbanBoardResponse board = kanbanService.getBoardWithFilters(userId, filterRequest);
+        return ResponseEntity.ok(ApiResponse.success(board));
+    }
+
+    // ==================== Fuzzy Search Operations ====================
+
+    /**
+     * Fuzzy search for emails on the Kanban board.
+     * Searches over subject and sender (name or email) with typo tolerance and partial matches.
+     * Results are ranked by relevance (best matches first).
+     *
+     * Examples:
+     * - "marketing" → finds emails about "marketing" even with typos like "markting"
+     * - "Nguy" → finds senders like "Nguyễn Văn A", "nguyen@example.com"
+     *
+     * Query Parameters:
+     * - query: The search query (required)
+     * - limit: Maximum results to return (default: 20, max: 100)
+     * - includeBody: Also search in preview/summary (default: false)
+     */
+    @GetMapping("/search")
+    public ResponseEntity<ApiResponse<FuzzySearchResponse>> fuzzySearch(
+            Authentication authentication,
+            @RequestParam String query,
+            @RequestParam(required = false, defaultValue = "20") Integer limit,
+            @RequestParam(required = false, defaultValue = "false") Boolean includeBody) {
+        String userId = (String) authentication.getPrincipal();
+        log.info("🔍 Fuzzy search for user: {} with query: '{}' (limit: {}, includeBody: {})",
+                userId, query, limit, includeBody);
+
+        FuzzySearchRequest request = FuzzySearchRequest.builder()
+                .query(query)
+                .limit(limit)
+                .includeBody(includeBody)
+                .build();
+
+        FuzzySearchResponse response = fuzzySearchService.search(userId, request);
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    /**
+     * Fuzzy search for emails using POST request body.
+     * Same as GET /search but accepts request body for complex queries.
+     */
+    @PostMapping("/search")
+    public ResponseEntity<ApiResponse<FuzzySearchResponse>> fuzzySearchPost(
+            Authentication authentication,
+            @RequestBody FuzzySearchRequest request) {
+        String userId = (String) authentication.getPrincipal();
+        log.info("🔍 Fuzzy search (POST) for user: {} with query: '{}' (limit: {}, includeBody: {})",
+                userId, request.getQuery(), request.getLimit(), request.getIncludeBody());
+
+        FuzzySearchResponse response = fuzzySearchService.search(userId, request);
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     // ==================== Gmail Sync Operations ====================

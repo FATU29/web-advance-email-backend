@@ -33,9 +33,11 @@ public class KanbanEmailResponse {
     private LocalDateTime receivedAt;
     
     private boolean isRead;
-    
+
     private boolean isStarred;
-    
+
+    private boolean hasAttachments;
+
     // AI Summary
     private String summary;
     

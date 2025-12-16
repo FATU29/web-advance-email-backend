@@ -1045,6 +1045,219 @@
             },
             "description": "Generate or regenerate AI summary for an email using Gemini API. Requires GEMINI_API_KEY to be configured."
           }
+        },
+        {
+          "name": "Fuzzy Search (GET)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/kanban/search?query=marketing&limit=20&includeBody=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "kanban", "search"],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "marketing",
+                  "description": "Search query (supports typos and partial matches)"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Maximum results to return (default: 20, max: 100)"
+                },
+                {
+                  "key": "includeBody",
+                  "value": "false",
+                  "description": "Also search in preview/summary (default: false)"
+                }
+              ]
+            },
+            "description": "Fuzzy search for emails on the Kanban board. Searches over subject and sender (name or email) with typo tolerance and partial matches. Results are ranked by relevance (best matches first). Examples: 'marketing' finds emails about 'marketing' even with typos like 'markting'. 'Nguy' finds senders like 'Nguyễn Văn A'."
+          }
+        },
+        {
+          "name": "Fuzzy Search (POST)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"marketing\",\n  \"limit\": 20,\n  \"includeBody\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/kanban/search",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "kanban", "search"]
+            },
+            "description": "Fuzzy search using POST request body. Same as GET /search but accepts request body for complex queries. Set includeBody to true to also search in preview and summary fields."
+          }
+        },
+        {
+          "name": "Get Filtered Board",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/kanban/board/filter?sortBy=date_newest&unreadOnly=false&hasAttachmentsOnly=false&maxEmailsPerColumn=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "kanban", "board", "filter"],
+              "query": [
+                {
+                  "key": "sortBy",
+                  "value": "date_newest",
+                  "description": "Sort order: date_newest (default), date_oldest, sender_name"
+                },
+                {
+                  "key": "unreadOnly",
+                  "value": "false",
+                  "description": "Show only unread emails (default: false)"
+                },
+                {
+                  "key": "hasAttachmentsOnly",
+                  "value": "false",
+                  "description": "Show only emails with attachments (default: false)"
+                },
+                {
+                  "key": "fromSender",
+                  "value": "",
+                  "description": "Filter by sender email or name (partial match)",
+                  "disabled": true
+                },
+                {
+                  "key": "columnId",
+                  "value": "",
+                  "description": "Filter by specific column ID",
+                  "disabled": true
+                },
+                {
+                  "key": "maxEmailsPerColumn",
+                  "value": "50",
+                  "description": "Maximum emails per column (default: 50, max: 100)"
+                }
+              ]
+            },
+            "description": "Get the Kanban board with filtering and sorting options. Supports sorting by date (newest/oldest) or sender name, and filtering by unread status, attachments, or sender."
+          }
+        },
+        {
+          "name": "Get Filtered Board - Unread Only",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/kanban/board/filter?unreadOnly=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "kanban", "board", "filter"],
+              "query": [
+                {
+                  "key": "unreadOnly",
+                  "value": "true",
+                  "description": "Show only unread emails"
+                }
+              ]
+            },
+            "description": "Get the Kanban board showing only unread emails."
+          }
+        },
+        {
+          "name": "Get Filtered Board - With Attachments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/kanban/board/filter?hasAttachmentsOnly=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "kanban", "board", "filter"],
+              "query": [
+                {
+                  "key": "hasAttachmentsOnly",
+                  "value": "true",
+                  "description": "Show only emails with attachments"
+                }
+              ]
+            },
+            "description": "Get the Kanban board showing only emails with attachments."
+          }
+        },
+        {
+          "name": "Get Filtered Board - Sort by Oldest",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/kanban/board/filter?sortBy=date_oldest",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "kanban", "board", "filter"],
+              "query": [
+                {
+                  "key": "sortBy",
+                  "value": "date_oldest",
+                  "description": "Sort by oldest first"
+                }
+              ]
+            },
+            "description": "Get the Kanban board sorted by oldest emails first."
+          }
+        },
+        {
+          "name": "Get Filtered Board - By Sender",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/kanban/board/filter?fromSender=john@example.com",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "kanban", "board", "filter"],
+              "query": [
+                {
+                  "key": "fromSender",
+                  "value": "john@example.com",
+                  "description": "Filter by sender (partial match on email or name)"
+                }
+              ]
+            },
+            "description": "Get the Kanban board filtered by a specific sender. Supports partial matching on both email address and sender name."
+          }
         }
       ]
     }

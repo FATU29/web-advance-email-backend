@@ -262,6 +262,131 @@ public class KanbanService {
     }
 
     /**
+     * Get the Kanban board with filtering and sorting options.
+     * Supports sorting by date (newest/oldest) or sender name,
+     * and filtering by unread status, attachments, or sender.
+     *
+     * @param userId The user ID
+     * @param filterRequest The filter and sort options
+     * @return KanbanBoardResponse with filtered and sorted emails
+     */
+    public KanbanBoardResponse getBoardWithFilters(String userId, KanbanFilterRequest filterRequest) {
+        // Get columns
+        List<KanbanColumnResponse> columns = getColumns(userId);
+        Map<String, List<KanbanEmailResponse>> emailsByColumn = new HashMap<>();
+
+        // Initialize empty lists for all columns
+        for (KanbanColumnResponse column : columns) {
+            emailsByColumn.put(column.getId(), new ArrayList<>());
+        }
+
+        // Load all emails from database
+        List<EmailKanbanStatus> allStatuses = emailStatusRepository.findByUserId(userId);
+
+        // Apply filters
+        List<EmailKanbanStatus> filteredStatuses = applyFilters(allStatuses, filterRequest);
+
+        // Convert to response and group by column
+        for (EmailKanbanStatus status : filteredStatuses) {
+            KanbanEmailResponse emailResponse = toEmailResponse(status);
+
+            String columnId = status.getColumnId();
+            // Filter by specific column if requested
+            if (filterRequest.getColumnId() != null && !filterRequest.getColumnId().isEmpty()) {
+                if (!columnId.equals(filterRequest.getColumnId())) {
+                    continue;
+                }
+            }
+
+            if (emailsByColumn.containsKey(columnId)) {
+                emailsByColumn.get(columnId).add(emailResponse);
+            }
+        }
+
+        // Apply sorting to each column
+        String sortBy = filterRequest.getSortBy() != null ? filterRequest.getSortBy() : "date_newest";
+        Comparator<KanbanEmailResponse> comparator = getSortComparator(sortBy);
+
+        int maxPerColumn = filterRequest.getMaxEmailsPerColumn() != null
+                ? Math.min(filterRequest.getMaxEmailsPerColumn(), 100) : 50;
+
+        for (Map.Entry<String, List<KanbanEmailResponse>> entry : emailsByColumn.entrySet()) {
+            List<KanbanEmailResponse> emails = entry.getValue();
+            emails.sort(comparator);
+            // Limit emails per column
+            if (emails.size() > maxPerColumn) {
+                entry.setValue(emails.subList(0, maxPerColumn));
+            }
+        }
+
+        log.info("Loaded filtered Kanban board for user {} with {} total emails (sortBy: {}, unreadOnly: {}, hasAttachmentsOnly: {})",
+                userId, filteredStatuses.size(), sortBy,
+                filterRequest.getUnreadOnly(), filterRequest.getHasAttachmentsOnly());
+
+        return KanbanBoardResponse.builder()
+                .columns(columns)
+                .emailsByColumn(emailsByColumn)
+                .build();
+    }
+
+    /**
+     * Apply filters to email statuses.
+     */
+    private List<EmailKanbanStatus> applyFilters(List<EmailKanbanStatus> statuses, KanbanFilterRequest filterRequest) {
+        return statuses.stream()
+                .filter(status -> {
+                    // Filter by unread only
+                    if (filterRequest.getUnreadOnly() != null && filterRequest.getUnreadOnly()) {
+                        if (status.isRead()) {
+                            return false;
+                        }
+                    }
+
+                    // Filter by has attachments only
+                    if (filterRequest.getHasAttachmentsOnly() != null && filterRequest.getHasAttachmentsOnly()) {
+                        if (!status.isHasAttachments()) {
+                            return false;
+                        }
+                    }
+
+                    // Filter by sender (partial match)
+                    if (filterRequest.getFromSender() != null && !filterRequest.getFromSender().isEmpty()) {
+                        String senderFilter = filterRequest.getFromSender().toLowerCase();
+                        String fromEmail = status.getFromEmail() != null ? status.getFromEmail().toLowerCase() : "";
+                        String fromName = status.getFromName() != null ? status.getFromName().toLowerCase() : "";
+
+                        if (!fromEmail.contains(senderFilter) && !fromName.contains(senderFilter)) {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                })
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Get comparator for sorting emails.
+     */
+    private Comparator<KanbanEmailResponse> getSortComparator(String sortBy) {
+        return switch (sortBy.toLowerCase()) {
+            case "date_oldest" -> Comparator.comparing(
+                    KanbanEmailResponse::getReceivedAt,
+                    Comparator.nullsLast(Comparator.naturalOrder())
+            );
+            case "sender_name" -> Comparator.comparing(
+                    e -> e.getFromName() != null ? e.getFromName().toLowerCase() : "",
+                    Comparator.nullsLast(Comparator.naturalOrder())
+            );
+            default -> // "date_newest" is default
+                    Comparator.comparing(
+                            KanbanEmailResponse::getReceivedAt,
+                            Comparator.nullsFirst(Comparator.reverseOrder())
+                    );
+        };
+    }
+
+    /**
      * Build KanbanEmailResponse from Gmail Message.
      */
     private KanbanEmailResponse buildKanbanEmailResponse(Message gmailMessage, String columnId, int orderInColumn,
@@ -361,6 +486,7 @@ public class KanbanService {
                 .receivedAt(gmailMessageConverter.getReceivedAt(gmailMessage))
                 .isRead(gmailMessageConverter.isRead(gmailMessage))
                 .isStarred(gmailMessageConverter.isStarred(gmailMessage))
+                .hasAttachments(gmailMessageConverter.hasAttachments(gmailMessage))
                 .summary(summary)
                 .summaryGeneratedAt(summaryGeneratedAt)
                 .snoozed(false)
@@ -410,6 +536,7 @@ public class KanbanService {
                             .receivedAt(gmailMessageConverter.getReceivedAt(gmailMessage))
                             .isRead(gmailMessageConverter.isRead(gmailMessage))
                             .isStarred(gmailMessageConverter.isStarred(gmailMessage))
+                            .hasAttachments(gmailMessageConverter.hasAttachments(gmailMessage))
                             .snoozed(false)
                             .createdAt(LocalDateTime.now())
                             .updatedAt(LocalDateTime.now())
@@ -453,6 +580,7 @@ public class KanbanService {
                 .receivedAt(status.getReceivedAt())
                 .isRead(status.isRead())
                 .isStarred(status.isStarred())
+                .hasAttachments(status.isHasAttachments())
                 .summary(status.getSummary())
                 .summaryGeneratedAt(status.getSummaryGeneratedAt())
                 .snoozed(status.isSnoozed())
@@ -528,6 +656,7 @@ public class KanbanService {
                             .receivedAt(gmailMessageConverter.getReceivedAt(gmailMessage))
                             .isRead(gmailMessageConverter.isRead(gmailMessage))
                             .isStarred(gmailMessageConverter.isStarred(gmailMessage))
+                            .hasAttachments(gmailMessageConverter.hasAttachments(gmailMessage))
                             .snoozed(false)
                             .createdAt(LocalDateTime.now())
                             .updatedAt(LocalDateTime.now())
@@ -642,6 +771,7 @@ public class KanbanService {
                             .receivedAt(gmailMessageConverter.getReceivedAt(gmailMessage))
                             .isRead(gmailMessageConverter.isRead(gmailMessage))
                             .isStarred(gmailMessageConverter.isStarred(gmailMessage))
+                            .hasAttachments(gmailMessageConverter.hasAttachments(gmailMessage))
                             .snoozed(false)
                             .createdAt(LocalDateTime.now())
                             .updatedAt(LocalDateTime.now())
@@ -822,6 +952,7 @@ public class KanbanService {
                         .receivedAt(gmailMessageConverter.getReceivedAt(gmailMessage))
                         .isRead(gmailMessageConverter.isRead(gmailMessage))
                         .isStarred(gmailMessageConverter.isStarred(gmailMessage))
+                        .hasAttachments(gmailMessageConverter.hasAttachments(gmailMessage))
                         .snoozed(false)
                         .createdAt(now)
                         .updatedAt(now)
