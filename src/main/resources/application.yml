@@ -47,6 +47,12 @@ app:
     base-url: ${AI_SERVICE_URL:http://localhost:8000}
     timeout-seconds: ${AI_SERVICE_TIMEOUT:30}
 
+  # OpenAI Configuration (for semantic search embeddings)
+  openai:
+    api-key: ${OPENAI_API_KEY:}
+    embedding-model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+    embedding-dimensions: ${OPENAI_EMBEDDING_DIMENSIONS:1536}
+
   #Brevo
   api-key:
     brevo: "${BREVO_API_KEY}"

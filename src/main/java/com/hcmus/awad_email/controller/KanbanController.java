@@ -1,8 +1,10 @@
 package com.hcmus.awad_email.controller;
 
+import com.google.api.services.gmail.model.Label;
 import com.hcmus.awad_email.dto.common.ApiResponse;
 import com.hcmus.awad_email.dto.kanban.*;
 import com.hcmus.awad_email.service.FuzzySearchService;
+import com.hcmus.awad_email.service.GmailService;
 import com.hcmus.awad_email.service.KanbanService;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +14,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/kanban")
@@ -23,6 +26,9 @@ public class KanbanController {
 
     @Autowired
     private FuzzySearchService fuzzySearchService;
+
+    @Autowired
+    private GmailService gmailService;
     
     // ==================== Board Operations ====================
 
@@ -177,7 +183,44 @@ public class KanbanController {
      * Simple response for Gmail connection status.
      */
     public record GmailStatusResponse(boolean connected) {}
-    
+
+    /**
+     * Get available Gmail labels for column mapping.
+     */
+    @GetMapping("/gmail-labels")
+    public ResponseEntity<ApiResponse<List<GmailLabelResponse>>> getGmailLabels(Authentication authentication) {
+        String userId = (String) authentication.getPrincipal();
+        log.info("📋 Get Gmail labels for user: {}", userId);
+
+        if (!kanbanService.isGmailConnected(userId)) {
+            return ResponseEntity.ok(ApiResponse.success(List.of()));
+        }
+
+        List<Label> labels = gmailService.listLabels(userId);
+        List<GmailLabelResponse> response = labels.stream()
+                .map(label -> new GmailLabelResponse(
+                        label.getId(),
+                        label.getName(),
+                        label.getType(),
+                        label.getMessageListVisibility(),
+                        label.getLabelListVisibility()
+                ))
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    /**
+     * Response for Gmail label information.
+     */
+    public record GmailLabelResponse(
+            String id,
+            String name,
+            String type,
+            String messageListVisibility,
+            String labelListVisibility
+    ) {}
+
     // ==================== Column Operations ====================
     
     /**

@@ -791,6 +791,24 @@
           }
         },
         {
+          "name": "Get Gmail Labels",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/kanban/gmail-labels",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "kanban", "gmail-labels"]
+            },
+            "description": "Get available Gmail labels for column mapping. Returns list of labels with id, name, type, messageListVisibility, and labelListVisibility. Use these labels to configure automatic label sync when emails are moved between columns."
+          }
+        },
+        {
           "name": "Get Columns",
           "request": {
             "method": "GET",
@@ -857,7 +875,59 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "kanban", "columns", "COLUMN_ID"]
             },
-            "description": "Update a Kanban column. Replace COLUMN_ID with actual column ID."
+            "description": "Update a Kanban column. Replace COLUMN_ID with actual column ID. Supports Gmail label mapping fields: gmailLabelId, gmailLabelName, addLabelsOnMove, removeLabelsOnMove, clearLabelMapping."
+          }
+        },
+        {
+          "name": "Update Column with Label Mapping",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gmailLabelId\": \"Label_123\",\n  \"gmailLabelName\": \"Important\",\n  \"addLabelsOnMove\": [\"STARRED\"],\n  \"removeLabelsOnMove\": [\"INBOX\", \"UNREAD\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/kanban/columns/COLUMN_ID",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "kanban", "columns", "COLUMN_ID"]
+            },
+            "description": "Update a Kanban column with Gmail label mapping. When emails are moved to this column, the specified labels will be automatically added/removed in Gmail. Use GET /api/kanban/gmail-labels to get available label IDs. Fields: gmailLabelId (primary label to add), gmailLabelName (display name), addLabelsOnMove (additional labels to add), removeLabelsOnMove (labels to remove)."
+          }
+        },
+        {
+          "name": "Clear Column Label Mapping",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clearLabelMapping\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/kanban/columns/COLUMN_ID",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "kanban", "columns", "COLUMN_ID"]
+            },
+            "description": "Clear all Gmail label mapping from a column. Set clearLabelMapping to true to remove gmailLabelId, gmailLabelName, addLabelsOnMove, and removeLabelsOnMove."
           }
         },
         {

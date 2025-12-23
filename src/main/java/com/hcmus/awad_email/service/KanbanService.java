@@ -98,17 +98,22 @@ public class KanbanService {
         if (columnRepository.existsByUserIdAndName(userId, request.getName())) {
             throw new BadRequestException("Column with name '" + request.getName() + "' already exists");
         }
-        
-        int order = request.getOrder() != null ? request.getOrder() 
+
+        int order = request.getOrder() != null ? request.getOrder()
                 : (int) columnRepository.countByUserId(userId);
-        
+
         KanbanColumn column = KanbanColumn.builder()
                 .userId(userId).name(request.getName()).type(KanbanColumn.ColumnType.CUSTOM)
                 .order(order).color(request.getColor()).isDefault(false)
+                .gmailLabelId(request.getGmailLabelId())
+                .gmailLabelName(request.getGmailLabelName())
+                .removeLabelsOnMove(request.getRemoveLabelsOnMove())
+                .addLabelsOnMove(request.getAddLabelsOnMove())
                 .createdAt(LocalDateTime.now()).updatedAt(LocalDateTime.now()).build();
-        
+
         column = columnRepository.save(column);
-        log.info("Created new column '{}' for user {}", request.getName(), userId);
+        log.info("Created new column '{}' for user {} with label mapping: {}",
+                request.getName(), userId, request.getGmailLabelId());
         return toColumnResponse(column);
     }
     
@@ -119,7 +124,7 @@ public class KanbanService {
     public KanbanColumnResponse updateColumn(String userId, String columnId, UpdateColumnRequest request) {
         KanbanColumn column = columnRepository.findByIdAndUserId(columnId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Column not found"));
-        
+
         if (request.getName() != null && !request.getName().equals(column.getName())) {
             if (columnRepository.existsByUserIdAndName(userId, request.getName())) {
                 throw new BadRequestException("Column with name '" + request.getName() + "' already exists");
@@ -128,9 +133,25 @@ public class KanbanService {
         }
         if (request.getColor() != null) column.setColor(request.getColor());
         if (request.getOrder() != null) column.setOrder(request.getOrder());
+
+        // Update Gmail label mapping
+        if (request.getClearLabelMapping() != null && request.getClearLabelMapping()) {
+            column.setGmailLabelId(null);
+            column.setGmailLabelName(null);
+            column.setRemoveLabelsOnMove(null);
+            column.setAddLabelsOnMove(null);
+        } else {
+            if (request.getGmailLabelId() != null) column.setGmailLabelId(request.getGmailLabelId());
+            if (request.getGmailLabelName() != null) column.setGmailLabelName(request.getGmailLabelName());
+            if (request.getRemoveLabelsOnMove() != null) column.setRemoveLabelsOnMove(request.getRemoveLabelsOnMove());
+            if (request.getAddLabelsOnMove() != null) column.setAddLabelsOnMove(request.getAddLabelsOnMove());
+        }
+
         column.setUpdatedAt(LocalDateTime.now());
-        
+
         column = columnRepository.save(column);
+        log.info("Updated column '{}' for user {} with label mapping: {}",
+                column.getName(), userId, column.getGmailLabelId());
         return toColumnResponse(column);
     }
     
@@ -168,6 +189,10 @@ public class KanbanService {
         return KanbanColumnResponse.builder()
                 .id(column.getId()).name(column.getName()).type(column.getType())
                 .order(column.getOrder()).color(column.getColor()).isDefault(column.isDefault())
+                .gmailLabelId(column.getGmailLabelId())
+                .gmailLabelName(column.getGmailLabelName())
+                .removeLabelsOnMove(column.getRemoveLabelsOnMove())
+                .addLabelsOnMove(column.getAddLabelsOnMove())
                 .emailCount(emailCount).createdAt(column.getCreatedAt()).updatedAt(column.getUpdatedAt())
                 .build();
     }
@@ -563,8 +588,56 @@ public class KanbanService {
         status.setUpdatedAt(LocalDateTime.now());
         status = emailStatusRepository.save(status);
 
+        // Sync Gmail labels based on column configuration
+        syncGmailLabelsForColumn(userId, request.getEmailId(), targetColumn);
+
         log.info("Moved email {} to column {} for user {}", request.getEmailId(), targetColumn.getName(), userId);
         return toEmailResponse(status);
+    }
+
+    /**
+     * Sync Gmail labels when an email is moved to a column.
+     * Applies the column's label mapping configuration.
+     */
+    private void syncGmailLabelsForColumn(String userId, String emailId, KanbanColumn column) {
+        // Check if Gmail is connected
+        if (!gmailService.isGmailConnected(userId)) {
+            log.debug("Gmail not connected for user {}, skipping label sync", userId);
+            return;
+        }
+
+        // Collect labels to add and remove
+        List<String> labelsToAdd = new ArrayList<>();
+        List<String> labelsToRemove = new ArrayList<>();
+
+        // Add the column's mapped label if configured
+        if (column.getGmailLabelId() != null && !column.getGmailLabelId().isEmpty()) {
+            labelsToAdd.add(column.getGmailLabelId());
+        }
+
+        // Add additional labels configured for this column
+        if (column.getAddLabelsOnMove() != null && !column.getAddLabelsOnMove().isEmpty()) {
+            labelsToAdd.addAll(column.getAddLabelsOnMove());
+        }
+
+        // Remove labels configured for this column
+        if (column.getRemoveLabelsOnMove() != null && !column.getRemoveLabelsOnMove().isEmpty()) {
+            labelsToRemove.addAll(column.getRemoveLabelsOnMove());
+        }
+
+        // Apply label changes if any
+        if (!labelsToAdd.isEmpty() || !labelsToRemove.isEmpty()) {
+            try {
+                gmailService.modifyMessage(userId, emailId,
+                        labelsToAdd.isEmpty() ? null : labelsToAdd,
+                        labelsToRemove.isEmpty() ? null : labelsToRemove);
+                log.info("Synced Gmail labels for email {} | added: {} | removed: {}",
+                        emailId, labelsToAdd, labelsToRemove);
+            } catch (Exception e) {
+                log.error("Failed to sync Gmail labels for email {}: {}", emailId, e.getMessage());
+                // Don't throw - label sync failure shouldn't block the move operation
+            }
+        }
     }
 
     private KanbanEmailResponse toEmailResponse(EmailKanbanStatus status) {

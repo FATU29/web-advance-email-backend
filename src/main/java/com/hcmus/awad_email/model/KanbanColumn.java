@@ -10,6 +10,7 @@ import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * Represents a Kanban column for organizing emails.
@@ -36,13 +37,24 @@ public class KanbanColumn {
     private int order; // Display order of the column
     
     private String color; // Optional color for the column
-    
+
     private boolean isDefault; // Whether this is a default system column
-    
+
+    // Gmail label mapping for automatic label sync
+    private String gmailLabelId; // Gmail label ID to apply when email is moved to this column
+
+    private String gmailLabelName; // Gmail label name for display
+
+    // Labels to remove when email is moved to this column
+    private List<String> removeLabelsOnMove;
+
+    // Labels to add when email is moved to this column
+    private List<String> addLabelsOnMove;
+
     private LocalDateTime createdAt;
-    
+
     private LocalDateTime updatedAt;
-    
+
     public enum ColumnType {
         INBOX,      // Default inbox column
         BACKLOG,    // Backlog column for new Gmail emails

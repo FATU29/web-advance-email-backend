@@ -10,6 +10,7 @@ import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * Tracks the Kanban status of an email for a specific user.
@@ -68,7 +69,13 @@ public class EmailKanbanStatus {
     private boolean hasAttachments;
 
     private LocalDateTime createdAt;
-    
+
     private LocalDateTime updatedAt;
+
+    // Vector embedding for semantic search
+    // Stores the embedding vector generated from subject + preview/body
+    private List<Double> embedding;
+
+    private LocalDateTime embeddingGeneratedAt;
 }
 
