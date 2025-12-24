@@ -1330,6 +1330,134 @@
           }
         }
       ]
+    },
+    {
+      "name": "Search (AI-Powered)",
+      "item": [
+        {
+          "name": "Get Semantic Search Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/search/semantic/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "search", "semantic", "status"]
+            },
+            "description": "Check if semantic search is available. Returns { available: true/false, message: '...' }. Semantic search requires the AI service to be running and configured."
+          }
+        },
+        {
+          "name": "Semantic Search",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"marketing\",\n  \"limit\": 20,\n  \"minScore\": 0.2,\n  \"generateMissingEmbeddings\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/search/semantic",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "search", "semantic"]
+            },
+            "description": "Perform semantic search on emails using AI-powered vector embeddings. Finds conceptually related emails, not just keyword matches. Example: Searching for 'money' will find emails about 'invoice', 'price', 'salary' even if the word 'money' doesn't appear. Set generateMissingEmbeddings to true to generate embeddings for emails that don't have them yet."
+          }
+        },
+        {
+          "name": "Generate All Embeddings",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/search/semantic/generate-embeddings",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "search", "semantic", "generate-embeddings"]
+            },
+            "description": "Generate embeddings for all emails that don't have them yet. This is useful for initializing semantic search on existing emails. Embeddings are generated via the AI service using OpenAI's text-embedding-3-small model."
+          }
+        },
+        {
+          "name": "Generate Embedding for Single Email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/search/semantic/generate-embedding/{{emailId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "search", "semantic", "generate-embedding", "{{emailId}}"]
+            },
+            "description": "Generate embedding for a single email via the AI service. Replace {{emailId}} with the actual email ID."
+          }
+        },
+        {
+          "name": "Get Search Suggestions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/search/suggestions?query=john",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "search", "suggestions"],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "john",
+                  "description": "Search query prefix for type-ahead suggestions"
+                }
+              ]
+            },
+            "description": "Get search suggestions based on query prefix. Returns matching contacts and keywords for type-ahead functionality. As the user types, call this endpoint to get suggestions."
+          }
+        },
+        {
+          "name": "Get All Contacts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/search/contacts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "search", "contacts"]
+            },
+            "description": "Get all unique contacts (senders) for the user. Useful for populating contact autocomplete or address book."
+          }
+        }
+      ]
     }
   ]
 }

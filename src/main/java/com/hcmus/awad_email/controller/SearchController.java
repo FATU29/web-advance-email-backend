@@ -31,22 +31,22 @@ public class SearchController {
     private SearchSuggestionService searchSuggestionService;
 
     /**
-     * Check if semantic search is available (OpenAI API configured).
+     * Check if semantic search is available (AI service configured and running).
      */
     @GetMapping("/semantic/status")
     public ResponseEntity<ApiResponse<SemanticSearchStatusResponse>> getSemanticSearchStatus() {
         boolean available = semanticSearchService.isAvailable();
         SemanticSearchStatusResponse status = new SemanticSearchStatusResponse(
                 available,
-                available ? "Semantic search is available" : "OpenAI API key not configured"
+                available ? "Semantic search is available" : "AI service not available"
         );
         return ResponseEntity.ok(ApiResponse.success(status));
     }
 
     /**
-     * Perform semantic search on emails.
+     * Perform semantic search on emails via AI service.
      * Uses vector embeddings to find conceptually related emails.
-     * 
+     *
      * Example: Searching for "money" will find emails about "invoice", "price", "salary"
      * even if the word "money" doesn't appear in them.
      */
@@ -59,7 +59,7 @@ public class SearchController {
 
         if (!semanticSearchService.isAvailable()) {
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("Semantic search is not available. OpenAI API key not configured."));
+                    .body(ApiResponse.error("Semantic search is not available. AI service not configured or not running."));
         }
 
         SemanticSearchResponse response = semanticSearchService.search(userId, request);
@@ -67,7 +67,7 @@ public class SearchController {
     }
 
     /**
-     * Generate embeddings for all emails that don't have them.
+     * Generate embeddings for all emails that don't have them via AI service.
      * This is useful for initializing semantic search on existing emails.
      */
     @PostMapping("/semantic/generate-embeddings")
@@ -78,7 +78,7 @@ public class SearchController {
 
         if (!semanticSearchService.isAvailable()) {
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("Semantic search is not available. OpenAI API key not configured."));
+                    .body(ApiResponse.error("Semantic search is not available. AI service not configured or not running."));
         }
 
         int generated = semanticSearchService.generateAllEmbeddings(userId);
@@ -90,7 +90,7 @@ public class SearchController {
     }
 
     /**
-     * Generate embedding for a single email.
+     * Generate embedding for a single email via AI service.
      */
     @PostMapping("/semantic/generate-embedding/{emailId}")
     public ResponseEntity<ApiResponse<Void>> generateEmbeddingForEmail(
@@ -101,7 +101,7 @@ public class SearchController {
 
         if (!semanticSearchService.isAvailable()) {
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("Semantic search is not available. OpenAI API key not configured."));
+                    .body(ApiResponse.error("Semantic search is not available. AI service not configured or not running."));
         }
 
         boolean success = semanticSearchService.generateEmbeddingForEmail(userId, emailId);
