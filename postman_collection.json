@@ -1458,6 +1458,37 @@
           }
         }
       ]
+    },
+    {
+      "name": "Forward Email",
+      "item": [
+        {
+          "name": "Forward Email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": [\"recipient@example.com\"],\n  \"cc\": [],\n  \"bcc\": [],\n  \"additionalMessage\": \"<p>FYI - see below.</p>\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/emails/{{emailId}}/forward",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "emails", "{{emailId}}", "forward"]
+            },
+            "description": "Forward an email to new recipients. The original email content is included below the additional message. Supports multiple recipients in to, cc, and bcc fields."
+          }
+        }
+      ]
     }
   ]
 }

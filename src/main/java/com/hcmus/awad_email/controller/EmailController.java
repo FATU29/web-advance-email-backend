@@ -148,6 +148,19 @@ public class EmailController {
         return ResponseEntity.ok(ApiResponse.success("Reply sent successfully", null));
     }
 
+    @PostMapping("/emails/{emailId}/forward")
+    public ResponseEntity<ApiResponse<Void>> forwardEmail(
+            Authentication authentication,
+            @PathVariable String emailId,
+            @Valid @RequestBody ForwardEmailRequest request) {
+        String userId = (String) authentication.getPrincipal();
+        log.info("📧 Forward email for user: {} | emailId: {} | to: {}",
+                userId, emailId, request.getTo());
+        emailService.forwardEmail(userId, emailId, request);
+        log.info("✅ Email forwarded successfully from user: {} for emailId: {}", userId, emailId);
+        return ResponseEntity.ok(ApiResponse.success("Email forwarded successfully", null));
+    }
+
     @PostMapping("/emails/{emailId}/modify")
     public ResponseEntity<ApiResponse<Void>> modifyEmail(
             Authentication authentication,

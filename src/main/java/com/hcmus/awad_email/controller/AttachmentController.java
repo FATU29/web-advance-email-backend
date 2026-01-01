@@ -1,5 +1,6 @@
 package com.hcmus.awad_email.controller;
 
+import com.hcmus.awad_email.dto.common.ApiResponse;
 import com.hcmus.awad_email.service.GmailService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,40 +22,64 @@ public class AttachmentController {
 
     @Autowired
     private GmailService gmailService;
-    
+
     /**
      * Download an attachment from Gmail
      * @param messageId Gmail message ID
      * @param attachmentId Gmail attachment ID
+     * @param filename Optional filename for the download
+     * @param mimeType Optional MIME type for the content
      */
     @GetMapping("/{messageId}/{attachmentId}")
     public ResponseEntity<byte[]> downloadAttachment(
             Authentication authentication,
             @PathVariable String messageId,
             @PathVariable String attachmentId,
-            @RequestParam(required = false) String filename) {
+            @RequestParam(required = false) String filename,
+            @RequestParam(required = false) String mimeType) {
 
         String userId = (String) authentication.getPrincipal();
         log.info("📎 Download attachment for user: {} | messageId: {} | attachmentId: {} | filename: {}",
                 userId, messageId, attachmentId, filename);
 
-        // This is a placeholder - full implementation would require:
-        // 1. Fetching attachment data from Gmail API
-        // 2. Determining content type
-        // 3. Streaming the data
-
-        // For now, return a simple response
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-        if (filename != null) {
-            headers.setContentDispositionFormData("attachment", filename);
+        // Check if Gmail is connected
+        if (!gmailService.isGmailConnected(userId)) {
+            log.warn("Gmail not connected for user: {}", userId);
+            return ResponseEntity.badRequest().build();
         }
 
-        log.warn("⚠️ Attachment download not fully implemented yet");
-        // TODO: Implement actual attachment download from Gmail API
+        // Fetch attachment data from Gmail API
+        byte[] attachmentData = gmailService.getAttachment(userId, messageId, attachmentId);
+
+        if (attachmentData == null || attachmentData.length == 0) {
+            log.warn("Attachment data is empty for messageId: {} attachmentId: {}", messageId, attachmentId);
+            return ResponseEntity.notFound().build();
+        }
+
+        // Set response headers
+        HttpHeaders headers = new HttpHeaders();
+
+        // Set content type
+        if (mimeType != null && !mimeType.isEmpty()) {
+            headers.setContentType(MediaType.parseMediaType(mimeType));
+        } else {
+            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+        }
+
+        // Set content disposition for download
+        if (filename != null && !filename.isEmpty()) {
+            headers.setContentDispositionFormData("attachment", filename);
+        } else {
+            headers.setContentDispositionFormData("attachment", "attachment");
+        }
+
+        headers.setContentLength(attachmentData.length);
+
+        log.info("✅ Attachment downloaded successfully | size: {} bytes", attachmentData.length);
+
         return ResponseEntity.ok()
                 .headers(headers)
-                .body(new byte[0]);
+                .body(attachmentData);
     }
 }
 

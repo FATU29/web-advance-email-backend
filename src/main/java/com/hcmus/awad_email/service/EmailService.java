@@ -190,5 +190,53 @@ public class EmailService {
         // Send reply via Gmail API
         gmailService.sendMessage(userId, to, subject, request.getBody());
     }
+
+    /**
+     * Forward an email via Gmail API
+     */
+    @Transactional
+    public void forwardEmail(String userId, String emailId, ForwardEmailRequest request) {
+        // Check if Gmail is connected
+        if (!gmailService.isGmailConnected(userId)) {
+            throw new ResourceNotFoundException("Gmail not connected. Please connect your Gmail account first.");
+        }
+
+        // Get original email from Gmail API
+        Message originalMessage = gmailService.getMessage(userId, emailId);
+        EmailDetailResponse originalEmail = gmailMessageConverter.toEmailDetailResponse(originalMessage);
+
+        // Prepare forward subject
+        String subject = originalEmail.getSubject().startsWith("Fwd:")
+                ? originalEmail.getSubject()
+                : "Fwd: " + originalEmail.getSubject();
+
+        // Build forwarded email body
+        StringBuilder forwardedBody = new StringBuilder();
+
+        // Add additional message if provided
+        if (request.getAdditionalMessage() != null && !request.getAdditionalMessage().isEmpty()) {
+            forwardedBody.append(request.getAdditionalMessage());
+            forwardedBody.append("<br><br>");
+        }
+
+        // Add forwarded message header
+        forwardedBody.append("---------- Forwarded message ---------<br>");
+        forwardedBody.append("From: ").append(originalEmail.getFrom()).append("<br>");
+        forwardedBody.append("Date: ").append(originalEmail.getReceivedAt()).append("<br>");
+        forwardedBody.append("Subject: ").append(originalEmail.getSubject()).append("<br>");
+        if (originalEmail.getTo() != null && !originalEmail.getTo().isEmpty()) {
+            forwardedBody.append("To: ").append(String.join(", ", originalEmail.getTo())).append("<br>");
+        }
+        forwardedBody.append("<br>");
+
+        // Add original email body
+        forwardedBody.append(originalEmail.getBody());
+
+        // Send forward via Gmail API
+        String to = String.join(", ", request.getTo());
+        gmailService.sendMessage(userId, to, subject, forwardedBody.toString());
+
+        log.info("✅ Email forwarded successfully from user: {} | emailId: {} | to: {}", userId, emailId, to);
+    }
 }
 

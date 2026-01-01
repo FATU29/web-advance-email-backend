@@ -360,12 +360,41 @@ public class GmailService {
     public boolean isGmailConnected(String userId) {
         return googleTokenRepository.findByUserId(userId).isPresent();
     }
-    
+
     /**
      * Disconnect Gmail (remove tokens)
      */
     public void disconnectGmail(String userId) {
         googleTokenRepository.deleteByUserId(userId);
+    }
+
+    /**
+     * Get attachment data from Gmail
+     * @param userId User ID
+     * @param messageId Gmail message ID
+     * @param attachmentId Gmail attachment ID
+     * @return Attachment data as byte array
+     */
+    public byte[] getAttachment(String userId, String messageId, String attachmentId) {
+        try {
+            Gmail service = getGmailService(userId);
+            MessagePartBody attachment = service.users().messages().attachments()
+                    .get("me", messageId, attachmentId)
+                    .execute();
+
+            // Gmail returns attachment data as URL-safe base64 encoded string
+            String data = attachment.getData();
+            if (data == null || data.isEmpty()) {
+                log.warn("Attachment data is empty for messageId: {} attachmentId: {}", messageId, attachmentId);
+                return new byte[0];
+            }
+
+            // Decode the base64 data
+            return Base64.getUrlDecoder().decode(data);
+        } catch (IOException e) {
+            log.error("Failed to get attachment: messageId={}, attachmentId={}", messageId, attachmentId, e);
+            throw new BadRequestException("Failed to download attachment: " + e.getMessage());
+        }
     }
 }
 
