@@ -16,6 +16,7 @@ Authorization: Bearer {accessToken}
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -39,6 +40,7 @@ Authorization: Bearer {accessToken}
 ```
 
 **Label Types:**
+
 - `system` - Built-in Gmail labels (INBOX, SENT, TRASH, SPAM, STARRED, UNREAD, etc.)
 - `user` - Custom labels created by the user
 
@@ -53,6 +55,7 @@ Content-Type: application/json
 ```
 
 **Request Body:**
+
 ```json
 {
   "gmailLabelId": "Label_123456789",
@@ -122,7 +125,7 @@ interface LabelMapping {
 interface GmailLabel {
   id: string;
   name: string;
-  type: 'system' | 'user';
+  type: "system" | "user";
   messageListVisibility: string;
   labelListVisibility: string;
 }
@@ -132,8 +135,8 @@ interface GmailLabel {
 
 ```tsx
 const fetchGmailLabels = async (): Promise<GmailLabel[]> => {
-  const response = await fetch('/api/kanban/gmail-labels', {
-    headers: { 'Authorization': `Bearer ${accessToken}` }
+  const response = await fetch("/api/kanban/gmail-labels", {
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
   const data = await response.json();
   return data.data || [];
@@ -144,16 +147,16 @@ const fetchGmailLabels = async (): Promise<GmailLabel[]> => {
 
 ```tsx
 const updateColumnLabelMapping = async (
-  columnId: string, 
+  columnId: string,
   mapping: LabelMapping
 ) => {
   const response = await fetch(`/api/kanban/columns/${columnId}`, {
-    method: 'PUT',
+    method: "PUT",
     headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
     },
-    body: JSON.stringify(mapping)
+    body: JSON.stringify(mapping),
   });
   return response.json();
 };
@@ -164,12 +167,12 @@ const updateColumnLabelMapping = async (
 ```tsx
 const clearLabelMapping = async (columnId: string) => {
   const response = await fetch(`/api/kanban/columns/${columnId}`, {
-    method: 'PUT',
+    method: "PUT",
     headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
     },
-    body: JSON.stringify({ clearLabelMapping: true })
+    body: JSON.stringify({ clearLabelMapping: true }),
   });
   return response.json();
 };
@@ -180,7 +183,7 @@ const clearLabelMapping = async (columnId: string) => {
 ### Column Settings with Label Mapping
 
 ```tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 
 interface ColumnLabelSettingsProps {
   column: KanbanColumn;
@@ -191,36 +194,41 @@ interface ColumnLabelSettingsProps {
 const ColumnLabelSettings: React.FC<ColumnLabelSettingsProps> = ({
   column,
   onSave,
-  onClear
+  onClear,
 }) => {
   const [labels, setLabels] = useState<GmailLabel[]>([]);
-  const [selectedLabel, setSelectedLabel] = useState(column.gmailLabelId || '');
-  const [addLabels, setAddLabels] = useState<string[]>(column.addLabelsOnMove || []);
-  const [removeLabels, setRemoveLabels] = useState<string[]>(column.removeLabelsOnMove || []);
+  const [selectedLabel, setSelectedLabel] = useState(column.gmailLabelId || "");
+  const [addLabels, setAddLabels] = useState<string[]>(
+    column.addLabelsOnMove || []
+  );
+  const [removeLabels, setRemoveLabels] = useState<string[]>(
+    column.removeLabelsOnMove || []
+  );
 
   useEffect(() => {
     fetchGmailLabels().then(setLabels);
   }, []);
 
   const handleSave = () => {
-    const label = labels.find(l => l.id === selectedLabel);
+    const label = labels.find((l) => l.id === selectedLabel);
     onSave({
       gmailLabelId: selectedLabel || null,
       gmailLabelName: label?.name || null,
       addLabelsOnMove: addLabels,
-      removeLabelsOnMove: removeLabels
+      removeLabelsOnMove: removeLabels,
     });
   };
 
   // Filter labels by type for better UX
-  const systemLabels = labels.filter(l => l.type === 'system');
-  const userLabels = labels.filter(l => l.type === 'user');
+  const systemLabels = labels.filter((l) => l.type === "system");
+  const userLabels = labels.filter((l) => l.type === "user");
 
   return (
     <div className="label-mapping-settings">
       <h4>Gmail Label Sync</h4>
       <p className="description">
-        Configure automatic Gmail label changes when emails are moved to this column.
+        Configure automatic Gmail label changes when emails are moved to this
+        column.
       </p>
 
       {/* Primary Label Selection */}
@@ -232,13 +240,17 @@ const ColumnLabelSettings: React.FC<ColumnLabelSettingsProps> = ({
         >
           <option value="">-- No label --</option>
           <optgroup label="Your Labels">
-            {userLabels.map(label => (
-              <option key={label.id} value={label.id}>{label.name}</option>
+            {userLabels.map((label) => (
+              <option key={label.id} value={label.id}>
+                {label.name}
+              </option>
             ))}
           </optgroup>
           <optgroup label="System Labels">
-            {systemLabels.map(label => (
-              <option key={label.id} value={label.id}>{label.name}</option>
+            {systemLabels.map((label) => (
+              <option key={label.id} value={label.id}>
+                {label.name}
+              </option>
             ))}
           </optgroup>
         </select>
@@ -283,6 +295,7 @@ const ColumnLabelSettings: React.FC<ColumnLabelSettingsProps> = ({
 ## Common Use Cases
 
 ### 1. "Done" Column - Archive emails
+
 ```json
 {
   "gmailLabelId": "Label_done",
@@ -291,9 +304,11 @@ const ColumnLabelSettings: React.FC<ColumnLabelSettingsProps> = ({
   "addLabelsOnMove": []
 }
 ```
+
 **Effect:** When email moves to Done, it's removed from Inbox and marked as read.
 
 ### 2. "Important" Column - Star and label
+
 ```json
 {
   "gmailLabelId": "Label_important",
@@ -302,9 +317,11 @@ const ColumnLabelSettings: React.FC<ColumnLabelSettingsProps> = ({
   "removeLabelsOnMove": []
 }
 ```
+
 **Effect:** When email moves to Important, it gets starred and labeled.
 
 ### 3. "To Do" Column - Keep in inbox but label
+
 ```json
 {
   "gmailLabelId": "Label_todo",
@@ -313,9 +330,11 @@ const ColumnLabelSettings: React.FC<ColumnLabelSettingsProps> = ({
   "removeLabelsOnMove": []
 }
 ```
+
 **Effect:** Email gets the "To Do" label but stays in inbox.
 
 ### 4. "Trash" Column - Move to trash
+
 ```json
 {
   "gmailLabelId": null,
@@ -324,6 +343,7 @@ const ColumnLabelSettings: React.FC<ColumnLabelSettingsProps> = ({
   "removeLabelsOnMove": ["INBOX"]
 }
 ```
+
 **Effect:** Email is moved to Gmail trash.
 
 ## Important Notes
@@ -335,6 +355,7 @@ const ColumnLabelSettings: React.FC<ColumnLabelSettingsProps> = ({
 3. **Sync Failures Don't Block**: If Gmail label sync fails (e.g., network issue), the email move still succeeds. Check server logs for sync errors.
 
 4. **System Labels**: Some system labels have special behavior:
+
    - `INBOX` - Removing archives the email
    - `UNREAD` - Removing marks as read
    - `STARRED` - Adding/removing stars the email
@@ -342,5 +363,7 @@ const ColumnLabelSettings: React.FC<ColumnLabelSettingsProps> = ({
    - `SPAM` - Adding marks as spam
 
 5. **Label IDs**: Always use label IDs (not names) for API calls. Names are for display only.
+
 ```
 
+```
